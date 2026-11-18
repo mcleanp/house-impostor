@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLE check</title>
+<style>
+body{margin:0;padding:12px;background:#0f1530;color:#e8ecff;font:17px/1.5 system-ui,sans-serif}
+h1{font-size:1.2rem;color:#ffd23f}
+button{display:block;width:100%;margin:10px 0;padding:18px;font-size:1.15rem;font-weight:700;border:0;border-radius:10px;background:#ffd23f;color:#111}
+#log{white-space:pre-wrap;background:#0a0e22;border:1px solid #2b3568;border-radius:10px;padding:10px;font:14px/1.5 ui-monospace,monospace;max-height:60vh;overflow:auto}
+.ok{color:#4ade80}.bad{color:#ff8a9b}
+</style>
+</head>
+<body>
+<h1>BLE check</h1>
+<p><b>If a popup appears, TAP an HB- beacon.</b> Then walk around 25s.</p>
+<button id="run">RUN</button>
+<div id="log"></div>
+<script>
+const $=(s)=>document.querySelector(s);
+const lines=[];
+function log(t,c){const d=document.createElement('div');if(c)d.className=c;d.textContent=t;$('#log').appendChild(d);lines.push(t);}
+function rep(o){try{fetch('/api/diag',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(o)});}catch(e){}}
+const bth=navigator.bluetooth;
+const heard={};
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+function onAd(tag){return (e)=>{const n=(e.device&&(e.device.name||e.device.localName))||e.name||'?';heard[n]=e.rssi;log('ADV '+n+' rssi='+e.rssi+' via '+tag,'ok');};}
+
+$('#run').onclick=async()=>{
+  let props=[]; try{props=Object.getOwnPropertyNames(Object.getPrototypeOf(bth)).sort();}catch(e){}
+  log('navigator.bluetooth methods: '+props.join(', '));
+  log('global watchAdvertisements: '+!!bth.watchAdvertisements, bth.watchAdvertisements?'ok':'bad');
+  rep({ev:'c3start',props,hasGlobal:!!bth.watchAdvertisements});
+
+  // 1) no-picker attempt: already-granted handles
+  let g=[]; try{g=await bth.getDevices();}catch(e){}
+  const gh=g.filter(d=>(d.name||'').startsWith('HB-'));
+  log('getDevices: '+g.length+' total, '+gh.length+' HB-');
+  window._k=window._k||[];
+  for(const d of gh){window._k.push(d);d.addEventListener('advertisementreceived',onAd('granted'));try{await d.watchAdvertisements();}catch(e){}}
+  if(gh.length){ log('listening via granted handles (no picker) 12s...'); await sleep(12000); log('heard so far: '+Object.keys(heard).length); }
+
+  // 2) picker attempt
+  if(!Object.keys(heard).length){
+    log('--- opening picker now: TAP an HB- beacon ---');
+    try{
+      const d=await bth.requestDevice({filters:[{namePrefix:'HB-'}]});
+      window._k.push(d); d.addEventListener('advertisementreceived',onAd('picked')); await d.watchAdvertisements();
+      log('picked '+(d.name||'?')+' - walk around 12s','ok');
+      await sleep(12000);
+    }catch(e){ log('picker threw: '+e+'  name='+(e&&e.name),'bad'); }
+  }
+  const n=Object.keys(heard);
+  log('--- TOTAL distinct: '+n.length+'  '+n.join(', ')+' ---', n.length?'ok':'bad');
+  rep({ev:'c3done',distinct:n.length,heard,lines:lines.slice(-40)});
+};
+</script>
+</body>
+</html>

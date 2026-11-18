@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>House Impostor — house editor</title>
+<style>
+body{max-width:62rem;margin:2rem auto;padding:0 1rem;background:#0f1530;color:#e8ecff;font:15px/1.5 system-ui,sans-serif}
+h1{color:#ffd23f;font-size:1.4rem}
+h2{color:#ffd23f;font-size:1rem;margin:1.4rem 0 .4rem;text-transform:uppercase;letter-spacing:.06em}
+.card{background:#1b2450;border:1px solid #2b3568;border-radius:14px;padding:1rem;margin:.8rem 0}
+a{color:#5ab0ff}
+code{background:#0f1530;padding:.15em .4em;border-radius:5px;font-size:.9em}
+input,select{background:#0f1530;color:#e8ecff;border:1px solid #2b3568;border-radius:8px;padding:.4rem .55rem;font-size:.95rem;max-width:100%}
+button{background:#ffd23f;border:0;border-radius:8px;padding:.45rem .9rem;font-weight:700;cursor:pointer}
+button.ghost{background:#2b3568;color:#e8ecff;font-weight:600}
+button.danger{background:#3b1f2b;color:#ff8a9b}
+.row{display:flex;gap:.4rem;align-items:center;margin:.3rem 0;flex-wrap:wrap}
+.row input[data-rid]{width:9rem}
+.row input[data-rname]{width:15rem}
+.row input[data-task]{flex:1;min-width:14rem}
+.sub{color:#93a0d5;font-size:.85rem}
+.bad{color:#ff8a9b}
+.warn{background:#3b1f2b;border-color:#5b2f3b}
+.bar{position:sticky;top:0;background:#0f1530;padding:.6rem 0;z-index:5;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;border-bottom:1px solid #2b3568}
+#msg{font-size:.9rem}
+textarea{width:100%;min-height:9rem;background:#0f1530;color:#e8ecff;border:1px solid #2b3568;border-radius:8px;padding:.5rem;font:12px/1.4 ui-monospace,monospace}
+</style>
+</head>
+<body>
+<h1>House Impostor — house editor</h1>
+<p class="sub">Edits the shared house map (floors · rooms · doors · levels · chores) and writes <code>house.json</code> on the server. This is the same map the in-game Setup screen edits — here you get the whole thing on one page, no game needed. Rooms are zones; a door is an edge between two rooms; a chore belongs to a room. A room with no doors is unreachable.</p>
+
+<div class="card" id="keycard">
+  <label>Admin key <input id="key" type="password" placeholder="ADMIN_KEY"> <button id="go">Load house</button></label>
+  <p class="sub">Same key as the admin page (<code>house</code> unless ADMIN_KEY was changed).</p>
+</div>
+
+<div id="editor" hidden>
+  <div class="bar">
+    <button id="save">Save to server</button>
+    <button id="reload" class="ghost">Reload from server</button>
+    <button id="showjson" class="ghost">JSON…</button>
+    <span id="msg" class="sub"></span>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Floors</h2>
+    <div id="floors"></div>
+    <button id="addfloor" class="ghost">+ floor</button>
+    <p class="sub">Floors are the levels of the house. Rooms sit on a floor; levels pick which floors are in play.</p>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Rooms</h2>
+    <div id="rooms"></div>
+    <button id="addroom" class="ghost">+ room</button>
+    <p class="sub">The <b>id</b> is what the ESP32 advertises (<code>HB-&lt;id&gt;</code>) — change it and you must reflash that board. The name is what players see.</p>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Doors</h2>
+    <div id="doors"></div>
+    <div class="row"><select id="da"></select> <span class="sub">↔</span> <select id="db"></select> <button id="adddoor" class="ghost">+ door</button></div>
+    <p class="sub">You can only walk through a door. Hallways are just rooms with doors to everything (the landings).</p>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Levels</h2>
+    <div id="levels"></div>
+    <button id="addlevel" class="ghost">+ level</button>
+    <p class="sub">A level is a set of floors the host can pick at Start. Each player gets 4 chores drawn from the rooms on the chosen level.</p>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Chores</h2>
+    <div id="tasks"></div>
+    <button id="addtask" class="ghost">+ chore</button>
+  </div>
+
+  <div class="card" id="jsoncard" hidden>
+    <h2 style="margin-top:0">Raw JSON</h2>
+    <textarea id="json"></textarea>
+    <div class="row"><button id="applyjson">Apply JSON to editor</button> <button id="dljson" class="ghost">Download</button></div>
+  </div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const slug = (s) => ((s || '').toLowerCase().replace(/[^a-z0-9]+/g, '') || 'room').slice(0, 16);
+const uniq = (base, taken) => { const b = slug(base); let id = b, i = 2; while (taken.includes(id)) id = b + i++; return id; };
+let H = null;
+
+const key = () => $('#key').value.trim();
+const msg = (t, cls) => { $('#msg').className = 'sub ' + (cls || ''); $('#msg').textContent = t; };
+
+const playFloors = () => (H.floors || []).filter((f) => f.id !== 'out');
+const playRooms = () => (H.rooms || []).filter((r) => !r.lobby);
+const roomName = (id) => ((H.rooms || []).find((r) => r.id === id) || {}).name || id;
+const doorCount = (id) => (H.edges || []).filter(([a, b]) => a === id || b === id).length;
+
+function load() {
+  fetch('/api/house').then((r) => r.json()).then((h) => {
+    H = h;
+    H.floors = H.floors || []; H.rooms = H.rooms || []; H.edges = H.edges || [];
+    H.levels = H.levels || []; H.tasks = H.tasks || [];
+    $('#keycard').hidden = true; $('#editor').hidden = false;
+    drawAll();
+    msg('loaded · ' + playRooms().length + ' rooms, ' + H.tasks.length + ' chores');
+  }).catch((e) => msg('load failed: ' + e.message, 'bad'));
+}
+
+function drawAll() { drawFloors(); drawRooms(); drawDoors(); drawLevels(); drawTasks(); }
+
+function drawFloors() {
+  $('#floors').innerHTML = playFloors().map((f) => `
+    <div class="row"><input data-fname="${f.id}" value="${esc(f.name)}"><span class="sub">${esc(f.id)}</span>
+    <button data-fdel="${f.id}" class="ghost danger">✕</button></div>`).join('') || '<p class="sub">no floors</p>';
+  $('#floors').querySelectorAll('[data-fname]').forEach((i) => i.addEventListener('change', () => {
+    const f = H.floors.find((x) => x.id === i.dataset.fname); if (f) f.name = i.value.trim() || f.name;
+  }));
+  $('#floors').querySelectorAll('[data-fdel]').forEach((b) => b.addEventListener('click', () => {
+    const id = b.dataset.fdel;
+    if (H.rooms.some((r) => r.floor === id)) { msg('move or delete its rooms first', 'bad'); return; }
+    H.floors.splice(H.floors.findIndex((x) => x.id === id), 1);
+    for (const l of H.levels) l.floors = (l.floors || []).filter((x) => x !== id);
+    drawAll();
+  }));
+}
+
+function drawRooms() {
+  const fl = playFloors();
+  $('#rooms').innerHTML = playRooms().map((r) => {
+    const n = doorCount(r.id);
+    return `<div class="row${n ? '' : ' warn'}">
+      <input data-rid="${r.id}" value="${esc(r.id)}" maxlength="16" spellcheck="false" title="room id = beacon name HB-<id>">
+      <input data-rname="${r.id}" value="${esc(r.name)}">
+      <select data-rfloor="${r.id}">${fl.map((f) => `<option value="${f.id}" ${f.id === r.floor ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}</select>
+      <span class="sub">${n ? n + ' door(s)' : '<b class="bad">no doors — unreachable</b>'} · <code>HB-${esc(r.id)}</code></span>
+      <button data-rdel="${r.id}" class="ghost danger">✕</button></div>`;
+  }).join('') || '<p class="sub">no rooms</p>';
+  $('#rooms').querySelectorAll('[data-rid]').forEach((i) => i.addEventListener('change', () => {
+    const old = i.dataset.rid;
+    const r = H.rooms.find((x) => x.id === old); if (!r) return drawAll();
+    const nid = slug(i.value);
+    if (!nid || nid === old) return drawAll();
+    if (H.rooms.some((x) => x.id === nid)) { msg(`id "${nid}" is taken`, 'bad'); return drawAll(); }
+    r.id = nid;
+    for (const e of H.edges) { if (e[0] === old) e[0] = nid; if (e[1] === old) e[1] = nid; }
+    for (const t of H.tasks) if (t.room === old) t.room = nid;
+    drawAll();
+    msg(`id ${old} → ${nid}. Reflash that ESP32 as HB-${nid}.`);
+  }));
+  $('#rooms').querySelectorAll('[data-rname]').forEach((i) => i.addEventListener('change', () => {
+    const r = H.rooms.find((x) => x.id === i.dataset.rname); if (r) r.name = i.value.trim() || r.name;
+  }));
+  $('#rooms').querySelectorAll('[data-rfloor]').forEach((s) => s.addEventListener('change', () => {
+    const r = H.rooms.find((x) => x.id === s.dataset.rfloor); if (r) r.floor = s.value;
+  }));
+  $('#rooms').querySelectorAll('[data-rdel]').forEach((b) => b.addEventListener('click', () => {
+    const id = b.dataset.rdel; const r = H.rooms.find((x) => x.id === id);
+    if (!r || !confirm(`Delete "${r.name}"? Its doors and chores go with it.`)) return;
+    H.rooms.splice(H.rooms.indexOf(r), 1);
+    H.edges = H.edges.filter(([a, c]) => a !== id && c !== id);
+    H.tasks = H.tasks.filter((t) => t.room !== id);
+    drawAll();
+  }));
+}
+
+function drawDoors() {
+  $('#doors').innerHTML = (H.edges || []).map((e, i) => `
+    <div class="row"><span class="sub">${esc(roomName(e[0]))} ↔ ${esc(roomName(e[1]))}</span>
+    <button data-edel="${i}" class="ghost danger">✕</button></div>`).join('') || '<p class="sub">no doors yet</p>';
+  $('#doors').querySelectorAll('[data-edel]').forEach((b) => b.addEventListener('click', () => { H.edges.splice(+b.dataset.edel, 1); drawAll(); }));
+  const opts = playRooms().map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
+  $('#da').innerHTML = opts; $('#db').innerHTML = opts;
+}
+
+function drawLevels() {
+  const fl = playFloors();
+  $('#levels').innerHTML = (H.levels || []).map((l, i) => `
+    <div class="row"><input data-lname="${i}" value="${esc(l.name)}">
+    <span class="sub">${fl.map((f) => `<label style="margin-right:.5rem"><input type="checkbox" data-lf="${i}:${f.id}" ${(l.floors || []).includes(f.id) ? 'checked' : ''}> ${esc(f.name)}</label>`).join('')}</span>
+    <button data-ldel="${i}" class="ghost danger">✕</button></div>`).join('') || '<p class="sub">no levels</p>';
+  $('#levels').querySelectorAll('[data-lname]').forEach((i) => i.addEventListener('change', () => { H.levels[+i.dataset.lname].name = i.value.trim() || H.levels[+i.dataset.lname].name; }));
+  $('#levels').querySelectorAll('[data-lf]').forEach((c) => c.addEventListener('change', () => {
+    const [i, fid] = c.dataset.lf.split(':'); const l = H.levels[+i];
+    l.floors = l.floors || [];
+    if (c.checked) { if (!l.floors.includes(fid)) l.floors.push(fid); }
+    else l.floors = l.floors.filter((x) => x !== fid);
+  }));
+  $('#levels').querySelectorAll('[data-ldel]').forEach((b) => b.addEventListener('click', () => { H.levels.splice(+b.dataset.ldel, 1); drawLevels(); }));
+}
+
+function drawTasks() {
+  const rooms = playRooms();
+  $('#tasks').innerHTML = (H.tasks || []).map((t, i) => `
+    <div class="row"><input data-task="${i}" value="${esc(t.name)}">
+    <select data-troom="${i}">${rooms.map((r) => `<option value="${r.id}" ${r.id === t.room ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select>
+    <button data-tdel="${i}" class="ghost danger">✕</button></div>`).join('') || '<p class="sub">no chores</p>';
+  $('#tasks').querySelectorAll('[data-task]').forEach((i) => i.addEventListener('change', () => { H.tasks[+i.dataset.task].name = i.value; }));
+  $('#tasks').querySelectorAll('[data-troom]').forEach((s) => s.addEventListener('change', () => { H.tasks[+s.dataset.troom].room = s.value; }));
+  $('#tasks').querySelectorAll('[data-tdel]').forEach((b) => b.addEventListener('click', () => { H.tasks.splice(+b.dataset.tdel, 1); drawTasks(); }));
+}
+
+/* ---- buttons ---- */
+$('#go').addEventListener('click', () => { localStorage.setItem('hi-admin-key', key()); load(); });
+$('#reload').addEventListener('click', () => { if (confirm('Discard unsaved changes and reload from the server?')) load(); });
+
+$('#addfloor').addEventListener('click', () => {
+  const name = (prompt('Floor name? (e.g. Attic)') || '').trim(); if (!name) return;
+  const id = uniq(name, H.floors.map((f) => f.id));
+  H.floors.push({ id, name });
+  const big = H.levels.slice().sort((a, b) => (b.floors || []).length - (a.floors || []).length)[0];
+  if (big) big.floors = (big.floors || []).concat(id);
+  H.levels.push({ id: uniq(id + 'only', H.levels.map((l) => l.id)), name: name + ' only', floors: [id] });
+  drawAll();
+});
+$('#addroom').addEventListener('click', () => {
+  const fl = playFloors(); if (!fl.length) return msg('add a floor first', 'bad');
+  const id = uniq('room', H.rooms.map((r) => r.id));
+  H.rooms.push({ id, floor: fl[0].id, name: 'New room' }); drawAll();
+});
+$('#adddoor').addEventListener('click', () => {
+  const a = $('#da').value, b = $('#db').value;
+  if (!a || !b) return msg('pick two rooms', 'bad');
+  if (a === b) return msg('a door to itself is a closet', 'bad');
+  if (H.edges.some(([x, y]) => (x === a && y === b) || (x === b && y === a))) return msg('that door already exists', 'bad');
+  H.edges.push([a, b]); drawAll();
+});
+$('#addlevel').addEventListener('click', () => {
+  const name = (prompt('Level name? (e.g. Attic only)') || '').trim(); if (!name) return;
+  H.levels.push({ id: uniq(name, H.levels.map((l) => l.id)), name, floors: playFloors().slice(0, 1).map((f) => f.id) });
+  drawLevels();
+});
+$('#addtask').addEventListener('click', () => {
+  const rooms = playRooms(); if (!rooms.length) return msg('add a room first', 'bad');
+  H.tasks.push({ room: rooms[0].id, name: 'New chore' }); drawTasks();
+});
+
+$('#save').addEventListener('click', () => {
+  if (!H.rooms.some((r) => !r.lobby)) return msg('house needs at least one non-lobby room', 'bad');
+  if (H.rooms.some((r) => !r.lobby && !doorCount(r.id)) && !confirm('Some rooms have no doors — nobody can walk into them. Save anyway?')) return;
+  msg('saving…');
+  fetch('/api/house?key=' + encodeURIComponent(key()), {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(H),
+  }).then((r) => r.json().then((d) => ({ ok: r.ok, d }))).then(({ ok, d }) => {
+    if (!ok) return msg('save failed: ' + (d.error || '?'), 'bad');
+    msg(`saved · ${d.rooms} rooms, ${d.tasks} chores, ${d.edges} doors, ${d.levels} levels`);
+  }).catch((e) => msg('save failed: ' + e.message, 'bad'));
+});
+
+$('#showjson').addEventListener('click', () => {
+  $('#jsoncard').hidden = !$('#jsoncard').hidden;
+  $('#json').value = JSON.stringify(H, null, 2);
+});
+$('#applyjson').addEventListener('click', () => {
+  try { H = JSON.parse($('#json').value); drawAll(); msg('JSON applied to the editor — press Save to write it'); }
+  catch (e) { msg('bad JSON: ' + e.message, 'bad'); }
+});
+$('#dljson').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(H, null, 2)], { type: 'application/json' }));
+  a.download = 'house.json'; a.click();
+});
+
+const saved = localStorage.getItem('hi-admin-key');
+if (saved) { $('#key').value = saved; load(); }
+</script>
+</body>
+</html>

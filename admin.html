@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>House Impostor — admin</title>
+<style>
+body{max-width:52rem;margin:2rem auto;padding:0 1rem;background:#0f1530;color:#e8ecff;font:16px/1.5 system-ui,sans-serif}
+h1{color:#ffd23f;font-size:1.4rem}
+.card{background:#1b2450;border:1px solid #2b3568;border-radius:14px;padding:1rem;margin:.8rem 0}
+table{border-collapse:collapse;width:100%}
+th,td{border-bottom:1px solid #2b3568;padding:.45rem .5rem;text-align:left;vertical-align:middle}
+th{color:#93a0d5;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em}
+a{color:#5ab0ff}
+code{background:#0f1530;padding:.15em .4em;border-radius:5px}
+input{background:#0f1530;color:#e8ecff;border:1px solid #2b3568;border-radius:8px;padding:.45rem .6rem;font-size:1rem}
+button{background:#ffd23f;border:0;border-radius:8px;padding:.45rem .9rem;font-weight:700;cursor:pointer}
+.pill{display:inline-block;padding:.1rem .5rem;border-radius:99px;font-size:.78rem;background:#2b3568}
+.pill.playing{background:#3b1f2b;color:#ff5d73}.pill.lobby{color:#4ade80}.pill.meeting{color:#ffd23f}
+.sub{color:#93a0d5;font-size:.85rem}
+</style>
+</head>
+<body>
+<h1>House Impostor — admin</h1>
+<p class="sub">Every game room running on this server, live. The house map (floors/rooms/doors) is shared by all games; each game room is one family session with its own 4-letter code.</p>
+<p class="sub">Editing the house (rooms, doors, chores, levels)? → <a href="/admin-house.html">House editor</a></p>
+
+<div class="card" id="keycard">
+  <label>Admin key <input id="key" type="password" placeholder="ADMIN_KEY"><button id="go">Connect</button></label>
+  <p class="sub">Same key the server uses for beacons unless ADMIN_KEY was set differently.</p>
+</div>
+
+<div class="card" id="list" hidden>
+  <p class="sub" id="meta"></p>
+  <table>
+    <thead><tr><th>Code</th><th>State</th><th>Level</th><th>Players</th><th>Host</th><th>Since</th><th></th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let timer = null;
+
+async function refresh() {
+  const key = $('#key').value.trim();
+  const r = await fetch('/api/rooms?key=' + encodeURIComponent(key));
+  if (r.status === 401) { $('#list').hidden = true; $('#keycard').hidden = false; if (timer) { clearInterval(timer); timer = null; } return; }
+  const d = await r.json();
+  $('#keycard').hidden = true; $('#list').hidden = false;
+  $('#meta').textContent = `${d.rooms.length} game room(s) · house map has ${d.houseRooms} playable rooms · ${d.beacons} beacon(s) reporting`;
+  $('#rows').innerHTML = d.rooms.map((x) => `
+    <tr>
+      <td><code>${esc(x.code)}</code></td>
+      <td><span class="pill ${esc(x.state)}">${esc(x.state)}</span></td>
+      <td>${esc(x.level)}</td>
+      <td>${x.players}${x.directors ? ' <span class="sub">+' + x.directors + ' dir</span>' : ''}</td>
+      <td>${esc(x.host) || '<span class="sub">—</span>'}</td>
+      <td>${x.startedAt ? new Date(x.startedAt).toLocaleTimeString() : '<span class="sub">not started</span>'}</td>
+      <td><a href="/?room=${esc(x.code)}">join</a> · <a href="/?room=${esc(x.code)}&director=1">watch</a></td>
+    </tr>`).join('') || '<tr><td colspan="7" class="sub">no games right now — open the site and press "New house".</td></tr>';
+}
+
+$('#go').addEventListener('click', () => {
+  localStorage.setItem('hi-admin-key', $('#key').value.trim());
+  refresh().then(() => { if (!$('#list').hidden && !timer) timer = setInterval(refresh, 5000); });
+});
+const saved = localStorage.getItem('hi-admin-key');
+if (saved) { $('#key').value = saved; refresh().then(() => { if (!$('#list').hidden && !timer) timer = setInterval(refresh, 5000); }); }
+</script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLE roam debug</title>
+<style>
+body{margin:0;padding:12px;background:#0f1530;color:#e8ecff;font:17px/1.5 system-ui,sans-serif}
+h1{font-size:1.2rem;color:#ffd23f}
+button{display:block;width:100%;margin:10px 0;padding:16px;font-size:1.1rem;font-weight:700;border:0;border-radius:10px;background:#ffd23f;color:#111}
+#log{white-space:pre-wrap;background:#0a0e22;border:1px solid #2b3568;border-radius:10px;padding:10px;font:13px/1.45 ui-monospace,monospace;max-height:60vh;overflow:auto}
+.ok{color:#4ade80}.bad{color:#ff8a9b}.dim{color:#93a0d5}
+</style>
+</head>
+<body>
+<h1>BLE roam debug</h1>
+<p class="dim">Open in <b>Bluefy</b>. Tap RUN, then <b>pick the HB- beacon you are nearest to</b>, and STAY near it for 30s. It reports itself.</p>
+<button id="run">RUN</button>
+<div id="log"></div>
+<script>
+const $=(s)=>document.querySelector(s);
+const lines=[];
+function log(t,c){const d=document.createElement('div');if(c)d.className=c;d.textContent=t;$('#log').appendChild(d);lines.push(t);}
+function rep(o){try{fetch('/api/diag',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(o)});}catch(e){}}
+const bth=navigator.bluetooth;
+window._keep=[];
+const heard={};   // name -> {rssi, via}
+function onAd(via){return (e)=>{const n=(e.device&&(e.device.name||e.device.localName))||'?';
+  if(!heard[n])heard[n]={rssi:e.rssi,via:via};
+  if(e.rssi>heard[n].rssi)heard[n].rssi=e.rssi;
+  log('ADV '+n+' rssi='+e.rssi+'  via='+via, via==='picked'?'ok':'');};}
+
+$('#run').onclick=async()=>{
+  log('=== RUN: which beacons can a watch actually hear? ===');
+  let granted=[]; try{granted=await bth.getDevices();}catch(e){}
+  const gNames=granted.map(d=>d.name||'?');
+  log('already-granted devices: '+gNames.join(', '),'dim');
+  rep({ev:'rStart',granted:gNames});
+
+  // 1) pick the nearest beacon (this is the handle that HAS worked before)
+  let picked=null;
+  try{ picked=await bth.requestDevice({filters:[{namePrefix:'HB-'}]}); }
+  catch(e){ log('picker threw '+e,'bad'); rep({ev:'rPick',err:''+e}); return; }
+  window._keep.push(picked);
+  log('PICKED: '+(picked.name||'?')+'  (stay near this one)','ok');
+  picked.addEventListener('advertisementreceived',onAd('picked'));
+  try{ await picked.watchAdvertisements(); }catch(e){ log('picked watch threw '+e,'bad'); }
+
+  // 2) ALSO watch every already-granted handle, tagged separately
+  let gWatched=0;
+  for(const d of granted){
+    if(!(d.name||'').startsWith('HB-'))continue;
+    window._keep.push(d);
+    d.addEventListener('advertisementreceived',onAd('granted:'+d.name));
+    try{ await d.watchAdvertisements(); gWatched++; }catch(e){}
+  }
+  log('also watching '+gWatched+' granted handle(s)');
+  log('--- listening 30s: walk near your other beacon(s) ---');
+
+  await new Promise(r=>setTimeout(r,30000));
+  const names=Object.keys(heard);
+  log('--- heard '+names.length+' distinct: '+names.join(', ')+' ---', names.length?'ok':'bad');
+  rep({ev:'rDone',picked:picked.name,gWatched,distinct:names.length,heard,lines:lines.slice(-60)});
+};
+</script>
+</body>
+</html>

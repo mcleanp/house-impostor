@@ -1,0 +1,16 @@
+<html><head><title>idle</title></head><body style="margin:0">
+<button id="b" style="width:300px;height:100px">SCAN</button><pre id="o"></pre>
+<script>
+window.__result = 'idle';
+document.getElementById('b').addEventListener('click', async () => {
+  const seen = {};
+  try {
+    const scan = await navigator.bluetooth.requestLEScan({ acceptAllAdvertisements: true });
+    window.__result = 'scanning';
+    navigator.bluetooth.addEventListener('advertisementreceived', (e) => {
+      const n = e.device && e.device.name;
+      if (n && n.startsWith('HB-')) { seen[n] = e.rssi; window.__result = 'HITS:' + JSON.stringify(seen); }
+    });
+  } catch (err) { window.__result = 'ERR:' + err.name + ':' + err.message; }
+});
+</script></body></html>

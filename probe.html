@@ -1,0 +1,10 @@
+<html><head><title>pending</title></head><body><script>
+const b = navigator.bluetooth || {};
+const proto = Object.getOwnPropertyNames(Object.getPrototypeOf(b) || {});
+document.title = JSON.stringify({
+  proto,
+  requestLEScan: typeof b.requestLEScan,
+  getDevices: typeof b.getDevices,
+  requestDevice: typeof b.requestDevice
+});
+</script></body></html>

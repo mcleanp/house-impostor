@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLE scan diagnostic</title>
+<style>
+body{margin:0;padding:12px;background:#0f1530;color:#e8ecff;font:17px/1.5 system-ui,sans-serif}
+h1{font-size:1.2rem;color:#ffd23f}
+p{margin:.4rem 0}
+button{display:block;width:100%;margin:8px 0;padding:16px;font-size:1.1rem;font-weight:700;border:0;border-radius:10px;background:#ffd23f;color:#111}
+button.alt{background:#2b3568;color:#e8ecff;padding:12px}
+#log{white-space:pre-wrap;background:#0a0e22;border:1px solid #2b3568;border-radius:10px;padding:10px;font:13px/1.45 ui-monospace,monospace;max-height:44vh;overflow:auto}
+#hits{background:#12203a;border:1px solid #2b3568;border-radius:10px;padding:10px;margin:8px 0;font:15px/1.5 ui-monospace,monospace}
+.ok{color:#4ade80}.bad{color:#ff8a9b}.dim{color:#93a0d5}
+</style>
+</head>
+<body>
+<h1>BLE scan diagnostic</h1>
+<p class="dim">Open in <b>Bluefy</b> on the iPhone. Tap <b>RUN ALL TESTS</b>, then just tell me "done" — this page reports itself to the server, so I read the result directly.</p>
+<div id="hits">beacons heard: <b id="n">0</b><br><span id="list" class="dim">none yet</span></div>
+<button id="runall">RUN ALL TESTS</button>
+<button id="b1" class="alt">1. global watchAdvertisements</button>
+<button id="b2" class="alt">2. requestLEScan</button>
+<button id="b3" class="alt">3. requestDevice + device.watchAdvertisements</button>
+<button id="b4" class="alt">re-send report to server</button>
+<div id="log"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const seen = {};
+const lines = [];
+function log(t, cls) {
+  const d = document.createElement('div'); if (cls) d.className = cls;
+  d.textContent = new Date().toLocaleTimeString() + '  ' + t;
+  $('#log').prepend(d); lines.push(t);
+  report();
+}
+function onAd(e) {
+  const d = e.device || {};
+  const n = d.name || d.localName || '(noname)';
+  seen[n] = e.rssi;
+  $('#n').textContent = Object.keys(seen).length;
+  $('#list').textContent = Object.entries(seen).map(([k, v]) => k + ' ' + v + 'dBm').join('  ·  ') || 'none yet';
+  log('ADV  ' + n + '  rssi=' + e.rssi, 'ok');
+}
+let rt = null;
+function report() {
+  clearTimeout(rt);
+  rt = setTimeout(() => {
+    fetch('/api/diag', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ua: navigator.userAgent, caps: CAPS, hits: seen, log: lines.slice(-60) }),
+    }).catch(() => {});
+  }, 800);
+}
+const bth = navigator.bluetooth;
+const CAPS = {
+  hasBluetooth: !!bth,
+  globalWatch: !!(bth && bth.watchAdvertisements),
+  requestLEScan: !!(bth && bth.requestLEScan),
+  deviceWatch: !!(window.BluetoothDevice && BluetoothDevice.prototype.watchAdvertisements),
+  getDevices: !!(bth && bth.getDevices),
+  secure: window.isSecureContext,
+  ua: navigator.userAgent,
+  bthProps: bth ? Object.getOwnPropertyNames(Object.getPrototypeOf(bth)).sort() : [],
+  devProps: window.BluetoothDevice ? Object.getOwnPropertyNames(BluetoothDevice.prototype).sort() : [],
+};
+function attach() { try { bth.addEventListener('advertisementreceived', onAd); log('listener attached on navigator.bluetooth'); } catch (e) { log('attach failed: ' + e, 'bad'); } }
+
+async function t1() {
+  log('--- test 1: navigator.bluetooth.watchAdvertisements ---');
+  if (!bth || !bth.watchAdvertisements) { log('NOT PRESENT on navigator.bluetooth', 'bad'); return; }
+  attach();
+  for (const opts of [{ acceptAllAdvertisements: true }, {}]) {
+    try { await bth.watchAdvertisements(opts); log('watchAdvertisements(' + JSON.stringify(opts) + ') OK', 'ok'); return; }
+    catch (e) { log('watchAdvertisements(' + JSON.stringify(opts) + ') threw ' + (e && e.name) + ': ' + (e && e.message), 'bad'); }
+  }
+}
+async function t2() {
+  log('--- test 2: requestLEScan ---');
+  if (!bth || !bth.requestLEScan) { log('NOT PRESENT', 'bad'); return; }
+  attach();
+  try { const s = await bth.requestLEScan({ acceptAllAdvertisements: true }); log('requestLEScan ok active=' + (s && s.active), 'ok'); }
+  catch (e) { log('requestLEScan threw ' + (e && e.name) + ': ' + (e && e.message), 'bad'); }
+}
+async function t3() {
+  log('--- test 3: requestDevice + device.watchAdvertisements ---');
+  if (!bth) { log('no navigator.bluetooth', 'bad'); return; }
+  try {
+    log('opening chooser (acceptAllDevices)...');
+    const dev = await bth.requestDevice({ acceptAllDevices: true });
+    log('picked device: ' + (dev.name || '(noname)'), 'ok');
+    dev.addEventListener('advertisementreceived', onAd);
+    await dev.watchAdvertisements();
+    log('device.watchAdvertisements() started', 'ok');
+  } catch (e) { log('threw ' + (e && e.name) + ': ' + (e && e.message), 'bad'); }
+}
+
+$('#b1').onclick = t1; $('#b2').onclick = t2; $('#b3').onclick = t3;
+$('#b4').onclick = () => { log('manual report'); report(); };
+$('#runall').onclick = async () => {
+  log('=== RUN ALL ===');
+  await t1();
+  await t2();
+  await t3();
+  log('=== done - waiting 6s for adverts ===');
+  setTimeout(() => { log('final report sent'); report(); }, 6000);
+};
+log('--- capabilities ---');
+Object.entries(CAPS).forEach(([k, v]) => log(k + ': ' + (Array.isArray(v) ? v.join(',') : v)));
+report();
+</script>
+</body>
+</html>

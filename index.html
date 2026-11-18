@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>House Impostor</title>
+<link rel="stylesheet" href="style.css?v=scan21">
+</head>
+<body>
+
+<!-- join -->
+<section id="scr-join" class="screen">
+  <div class="card">
+    <h1>House<br><span>Impostor</span></h1>
+    <p class="sub">Live-action Among Us in your own house. Rooms by BLE beacon or by tapping the door you walked through. One impostor, chores as tasks, no app.</p>
+    <label>Name <input id="in-name" maxlength="18" autocomplete="off"></label>
+    <label>Room code <input id="in-code" maxlength="4" autocapitalize="characters" autocomplete="off" placeholder="KEYS"></label>
+    <button id="btn-join" class="big">Join lobby</button>
+    <button id="btn-new" class="ghost">New house (make a room)</button>
+    <label class="row"><input type="checkbox" id="in-director"> Director (spectate all, not play)</label>
+    <p class="sub"><a href="/guide.html" style="color:var(--blue)">How to play &amp; setup guide</a> · <a href="/admin.html" style="color:var(--blue)">Admin — all game rooms</a></p>
+    <p id="ble-warn" class="warn" hidden></p>
+  </div>
+</section>
+
+<!-- game -->
+<section id="scr-game" class="screen" hidden>
+  <header>
+    <div><b id="h-code">----</b> <span id="h-state" class="pill">lobby</span></div>
+    <div id="h-role" class="pill"></div>
+    <div>tasks <b id="h-prog">0%</b></div>
+  </header>
+
+  <div id="floorplan"></div>
+
+  <div id="panel-people" class="card">
+    <h2>In your room</h2>
+    <div id="people"></div>
+    <div id="move" class="btnrow"></div>
+  </div>
+
+  <div id="panel-tasks" class="card" hidden>
+    <h2>Your tasks <span id="holdhint" class="sub"></span></h2>
+    <div id="tasks"></div>
+  </div>
+
+  <div id="panel-actions" class="card">
+    <div class="btnrow">
+      <button id="btn-report" class="danger">Report body</button>
+      <button id="btn-emergency" class="danger">Emergency</button>
+      <button id="btn-ble" class="ghost">Pair my beacons</button>
+      <button id="btn-scan" class="ghost">Auto-detect room (scan)</button>
+    </div>
+    <div id="ble-status" class="sub"></div>
+  </div>
+
+  <div id="panel-setup" class="card" hidden>
+    <h2>Host setup</h2>
+    <label>Level <select id="sel-level"></select></label>
+    <button id="btn-start" class="big">Start round</button>
+    <button id="btn-reset" class="ghost">Back to lobby</button>
+    <details><summary>Edit house (rooms, tasks)</summary>
+      <div id="house-edit"></div>
+      <button id="btn-house-save" class="ghost">Save house</button>
+    </details>
+    <div id="beacons" class="sub"></div>
+  </div>
+
+  <div id="feed" class="card"><h2>Feed</h2><div id="events"></div></div>
+</section>
+
+<!-- meeting overlay -->
+<div id="scr-meeting" class="overlay" hidden>
+  <div class="card">
+    <h1>MEETING <span id="m-timer">45</span></h1>
+    <p id="m-reason" class="sub"></p>
+    <div id="vote"></div>
+    <button id="btn-skip" class="ghost">Skip vote</button>
+    <p id="m-votes" class="sub"></p>
+  </div>
+</div>
+
+<!-- game over overlay -->
+<div id="scr-over" class="overlay" hidden>
+  <div class="card">
+    <h1 id="over-title"></h1>
+    <div id="over-roles"></div>
+    <button id="btn-again" class="big">Back to lobby</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="config.js?v=scan21"></script>
+<script src="app.js?v=scan21"></script>
+</body>
+</html>

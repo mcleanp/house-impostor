@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLE prime test</title>
+<style>
+body{margin:0;padding:12px;background:#0f1530;color:#e8ecff;font:17px/1.5 system-ui,sans-serif}
+h1{font-size:1.2rem;color:#ffd23f}
+button{display:block;width:100%;margin:10px 0;padding:18px;font-size:1.15rem;font-weight:700;border:0;border-radius:10px;background:#ffd23f;color:#111}
+#log{white-space:pre-wrap;background:#0a0e22;border:1px solid #2b3568;border-radius:10px;padding:10px;font:14px/1.5 ui-monospace,monospace;max-height:62vh;overflow:auto}
+.ok{color:#4ade80}.bad{color:#ff8a9b}.dim{color:#93a0d5}
+</style>
+</head>
+<body>
+<h1>BLE prime test</h1>
+<p><b>Tap RUN once. Do NOT tap again.</b> If a popup appears, TAP one HB- beacon. Stay put ~30s.</p>
+<button id="run">RUN</button>
+<div id="log"></div>
+<script>
+const $=(s)=>document.querySelector(s);
+const lines=[];
+function log(t,c){const d=document.createElement('div');if(c)d.className=c;d.textContent=t;$('#log').appendChild(d);lines.push(t);}
+function rep(o){try{fetch('/api/diag',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(o)});}catch(e){}}
+const bth=navigator.bluetooth;
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+let heard={}, firstAt=0, t0=0;
+function onAd(tag){return (e)=>{const n=(e.device&&(e.device.name||e.device.localName))||e.name||'?';
+  if(!heard[n])heard[n]=e.rssi;
+  if(!firstAt)firstAt=Date.now()-t0;
+  log('ADV '+n+' rssi='+e.rssi+' via '+tag+'  (+'+(Date.now()-t0)+'ms)', tag==='granted'?'ok':'');};}
+window._k=[];
+
+async function watchAll(tag){
+  const g=(await bth.getDevices()).filter(d=>(d.name||'').startsWith('HB-'));
+  let w=0;
+  for(const d of g){ window._k.push(d); d.addEventListener('advertisementreceived',onAd(tag)); try{await d.watchAdvertisements();w++;}catch(e){} }
+  return w;
+}
+
+$('#run').onclick=async()=>{
+  t0=Date.now(); heard={}; firstAt=0;
+  log('=== PRIME TEST: can we start a scan with NO tap? ===');
+  const props=Object.getOwnPropertyNames(Object.getPrototypeOf(bth)).sort();
+  log('methods: '+props.join(', '),'dim');
+  rep({ev:'pStart',props});
+
+  // T1: granted-only, no requestDevice. Is a prime already active?
+  let g=[]; try{g=await bth.getDevices();}catch(e){}
+  log('granted: '+g.length+' ('+g.filter(d=>(d.name||'').startsWith('HB-')).length+' HB-)','dim');
+  let w1=0; try{w1=await watchAll('granted');}catch(e){}
+  log('T1: watching '+w1+' granted, NO requestDevice, 8s...');
+  await sleep(8000);
+  const n1=Object.keys(heard).length;
+  log('T1 result: '+n1+' heard'+(n1?'  first@'+firstAt+'ms':''), n1?'ok':'bad');
+  rep({ev:'pT1',w1,n1,firstAt});
+
+  // T2: re-call watchAdvertisements (abort+restart), still no requestDevice
+  if(!n1){
+    log('T2: re-calling watchAdvertisements on all granted (no picker), 8s...');
+    for(const d of window._k){ try{ await d.watchAdvertisements(); }catch(e){} }
+    await sleep(8000);
+    const n2=Object.keys(heard).length;
+    log('T2 result: '+n2+' heard', n2?'ok':'bad');
+    rep({ev:'pT2',n2});
+  }
+
+  // T3: requestDevice with NO fresh gesture (8-16s after the tap)
+  if(!Object.keys(heard).length){
+    log('T3: requestDevice now - NO fresh tap. If a popup shows, TAP an HB- beacon.','dim');
+    try{
+      const d=await bth.requestDevice({filters:[{namePrefix:'HB-'}]});
+      window._k.push(d); d.addEventListener('advertisementreceived',onAd('picked'));
+      try{await d.watchAdvertisements();}catch(e){}
+      log('T3: picker resolved WITHOUT new gesture -> '+(d.name||'?'),'ok');
+    }catch(e){ log('T3: requestDevice threw '+e+' name='+(e&&e.name),'bad'); rep({ev:'pT3err',name:e&&e.name,msg:''+e}); }
+    await sleep(10000);
+    const n3=Object.keys(heard).length;
+    log('T3 result: '+n3+' heard', n3?'ok':'bad');
+    rep({ev:'pT3',n3});
+  }
+
+  const n=Object.keys(heard);
+  log('--- TOTAL distinct: '+n.length+'  '+n.join(', ')+' ---', n.length?'ok':'bad');
+  rep({ev:'pDone',distinct:n.length,heard,lines:lines.slice(-40)});
+};
+</script>
+</body>
+</html>

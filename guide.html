@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>House Impostor — guide</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <style>
+  body{max-width:52rem;margin:2.5rem auto;padding:0 1.25rem;background:#0f1530;color:#e8ecff;
+  font:16px/1.65 system-ui,sans-serif}
+  h1,h2,h3{color:#ffd23f;line-height:1.25}
+  h2{margin-top:2.4rem;border-bottom:1px solid #2b3568;padding-bottom:.3rem}
+  a{color:#5ab0ff}
+  code{background:#1b2450;padding:.15em .4em;border-radius:4px;font-size:.92em}
+  pre{background:#1b2450;padding:.9rem 1rem;border-radius:8px;overflow:auto;border:1px solid #2b3568}
+  pre code{background:none;padding:0}
+  table{border-collapse:collapse;width:100%;margin:1rem 0}
+  th,td{border:1px solid #2b3568;padding:.45rem .6rem;text-align:left;vertical-align:top}
+  th{background:#1b2450;color:#ffd23f}
+  blockquote{border-left:3px solid #ffd23f;margin:1rem 0;padding:.2rem 1rem;color:#c7cff5}
+  hr{border:0;border-top:1px solid #2b3568;margin:2rem 0}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">House Impostor — guide</h1>
+</header>
+<h1 id="house-impostor">House Impostor</h1>
+<p>Live-action Among Us <strong>inside your house</strong>. No GPS
+indoors (it cannot tell a bedroom from a bathroom, let alone a floor).
+Instead the house is a <strong>graph of rooms joined by doors</strong>,
+and the server — never the phone — decides who is where:</p>
+<ul>
+<li><strong>Rooms &amp; floors</strong> are a table
+(<code>house.json</code>). A room <em>knows</em> its floor, so elevation
+is a lookup, not a measurement. Your layout is pre-loaded: 3 floors, 9
+playable rooms + a lobby, stairs as landing-to-landing edges.</li>
+<li><strong>Movement</strong>: you may only move to a room with a door
+to your current one, 3 s per door. No teleporting from basement to
+attic. This is why the hallways/stairs exist in the map.</li>
+<li><strong>Locating players</strong>: two ways, and they combine.
+<ol type="1">
+<li><em>Tap the door you walked through</em> — works in
+<strong>every</strong> browser, iPhone Safari included, zero
+hardware.</li>
+<li><em>BLE beacons</em> — one ESP32 board per room (~$4, USB-powered).
+The board measures <strong>your phone’s</strong> signal and posts it to
+the server; the server picks the room. Phones cannot lie about a
+measurement they cannot see. RSSI must clear −92 dBm
+<strong>and</strong> beat the runner-up by 5 dB or the room does not
+flip — that is the “which floor am I really on” referee.</li>
+</ol></li>
+<li><strong>Levels</strong>: whole house, top floor only, downstairs
+only, basement only.</li>
+<li><strong>Open-plan note</strong>: radio waves ignore furniture, so
+one big kitchen/dining/living space is <strong>one room</strong> in the
+map. Tasks (chores at exact spots) give it texture; zones decide
+kills.</li>
+</ul>
+<h2 id="play">Play</h2>
+<ul>
+<li>Host opens the site → “New house” → everyone else joins with the
+4-letter code. Pick a level → Start. Roles dealt server-side.</li>
+<li>Crew: do 4 chores (press-and-hold 5 s <strong>while the server
+believes you are in that room</strong>). Impostor: kills need the same
+room, 45 s cooldown; fakes tasks.</li>
+<li>Dead walk to the lobby. Bodies get reported; meetings are 45 s,
+majority ejects. <code>?director=1</code> spectates everything.</li>
+<li><strong>Host setup → “Edit house”</strong>: add/rename/delete
+floors, rooms and doors, add/delete chores. Each room row has
+<strong>two</strong> text boxes: the <strong>id</strong> (lowercase,
+editable anytime — renaming it moves its doors, chores and beacon cal
+with it; it’s also the BLE name <code>HB-&lt;id&gt;</code>, so re-flash
+that room’s ESP32 after a rename) and the display name. Deleting a room
+takes its doors and chores with it; the server rejects duplicate
+ids/doors, self-doors and anything pointing at a room that no longer
+exists. Save writes <code>house.json</code> and everyone’s floorplan
+updates live.</li>
+<li><strong>Multiple games at once</strong>: every “New house” is its
+own game room (4-letter code); they all share the one house map.
+<code>/admin.html</code> (asks for the admin key, default
+<code>house</code>, same as the beacon key) lists every live game —
+code, state, players, host — with join/watch links, refreshing every 5
+s.</li>
+<li>Fog of war: you only see people in your room.</li>
+</ul>
+<h2 id="iphone-caveat-stated-plainly">iPhone caveat, stated plainly</h2>
+<p>Web Bluetooth is <strong>not</strong> in any iOS browser (Apple has
+not shipped it as of 2026). iPhone players either tap doors (fully
+playable) or open the same URL in the free <strong>Bluefy</strong>
+browser, which has Web Bluetooth, to get beacon tracking. Android:
+Chrome works as-is. iOS freezes BLE when the screen sleeps — keep the
+screen on during a round.</p>
+<h2 id="files">Files</h2>
+<pre><code>server.js       authoritative engine: rooms, graph, RSSI, roles, tasks, votes
+house.json      the house: rooms/floors/doors/levels/tasks (host can edit in-game)
+public/         index.html app.js style.css config.js (no build step)
+esp32/room_beacon/room_beacon.ino   beacon firmware (Arduino IDE, NimBLE-Arduino)
+sim.js          28 headless checks: fake phones + fake beacons vs a real server
+deploy-on-box.sh  idempotent deploy for the aaPanel box</code></pre>
+<h2 id="run">Run</h2>
+<pre><code>PORT=8322 node server.js
+node sim.js          # spawns its own server on :8399</code></pre>
+<h2 id="deploy-aapanel-box-done-this-way-already">Deploy (aaPanel box,
+done this way already)</h2>
+<pre><code>tar czf house-among.tgz -C /srv/slchat/ws/u3/c167 house-among
+# scp via jumpbox to root@192.168.1.7, then:
+tar xzf house-among.tgz -C /tmp &amp;&amp; bash /tmp/house-among/deploy-on-box.sh</code></pre>
+<p>The script installs everything <strong>into the aaPanel site folder
+itself</strong> (<code>/www/wwwroot/amongus.cubamclean.com</code>, the
+vhost root — same folder as the old project, visible in the panel’s file
+manager): <code>public/*</code> at the root plus <code>server.js</code>,
+<code>house.json</code>, <code>sim.js</code>, <code>esp32/</code>
+alongside. It bumps asset <code>?v=</code> hashes (the vhost caches
+<code>.js</code> 12 h and Cloudflare happily caches that), installs
+systemd unit <code>house-among</code> (port 8322, paths inside the site
+folder), drops the WebSocket/beacon proxy into aaPanel’s
+<strong>extension dir</strong> (never edits the vhost), verifies
+<code>/</code>, <code>/api/rules</code>, <code>/health</code> and a real
+<code>101</code> upgrade.</p>
+<h2 id="beacon-setup-later-optional">Beacon setup (later, optional)</h2>
+<ol type="1">
+<li>Arduino IDE + esp32 board package + NimBLE-Arduino library.</li>
+<li>In <code>room_beacon.ino</code>: WiFi creds,
+<code>SERVER_URL = http://192.168.1.7/api/beacon</code>,
+<code>ROOM = "bed1"</code> (one per board). Flash, plug into a USB
+brick, place in the room.</li>
+<li>The Setup screen lists beacons reporting in within seconds.</li>
+<li>Players running Chrome/Bluefy tap “Pair my beacons” once per nearby
+beacon.</li>
+</ol>
+</body>
+</html>

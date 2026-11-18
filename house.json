@@ -1,0 +1,220 @@
+{
+  "_comment": "The house model. Rooms are zones; edges are doors (the movement graph - you can only walk through doors). Floors come from each room's floor field, so 'which floor am I on' is a table lookup, never a GPS guess. The host can rename rooms and edit tasks from the in-game Setup screen; saving writes this file back. Beacon = an ESP32 whose advertised name is HB-<room id>; cal is an optional dBm offset if a beacon sits oddly far from its room.",
+  "floors": [
+    {
+      "id": "f2",
+      "name": "Top floor"
+    },
+    {
+      "id": "f1",
+      "name": "First floor"
+    },
+    {
+      "id": "f0",
+      "name": "Basement"
+    }
+  ],
+  "rooms": [
+    {
+      "id": "lobby",
+      "floor": "out",
+      "name": "Lobby (you are out)",
+      "lobby": true
+    },
+    {
+      "id": "bed1",
+      "floor": "f2",
+      "name": "Cuba Bedroom"
+    },
+    {
+      "id": "bed2",
+      "floor": "f2",
+      "name": "Bama Bedroom"
+    },
+    {
+      "id": "bath",
+      "floor": "f2",
+      "name": "Bathroom"
+    },
+    {
+      "id": "land2",
+      "floor": "f2",
+      "name": "Top landing"
+    },
+    {
+      "id": "down",
+      "floor": "f1",
+      "name": "TV Room"
+    },
+    {
+      "id": "land1",
+      "floor": "f1",
+      "name": "Stair landing"
+    },
+    {
+      "id": "base1",
+      "floor": "f0",
+      "name": "Basement room 1"
+    },
+    {
+      "id": "base2",
+      "floor": "f0",
+      "name": "Basement room 2"
+    },
+    {
+      "id": "land0",
+      "floor": "f0",
+      "name": "Basement landing"
+    },
+    {
+      "id": "room",
+      "floor": "f1",
+      "name": "Livingroom/Dining Room"
+    },
+    {
+      "id": "room2",
+      "floor": "f1",
+      "name": "Kitchen"
+    }
+  ],
+  "_edges": "Doors. land2-land1 and land1-land0 are the stairs; every room hangs off a landing. Hallways exist only as these landings - that is what makes an ambush at the bottom of the stairs possible.",
+  "edges": [
+    [
+      "bed1",
+      "land2"
+    ],
+    [
+      "bed2",
+      "land2"
+    ],
+    [
+      "bath",
+      "land2"
+    ],
+    [
+      "land2",
+      "land1"
+    ],
+    [
+      "land1",
+      "land0"
+    ],
+    [
+      "base1",
+      "land0"
+    ],
+    [
+      "base2",
+      "land0"
+    ],
+    [
+      "down",
+      "room"
+    ],
+    [
+      "land1",
+      "room"
+    ],
+    [
+      "room",
+      "room2"
+    ]
+  ],
+  "_levels": "Levels = which floors are in play. Pick one at Start. Whole house is the classic.",
+  "levels": [
+    {
+      "id": "top",
+      "name": "Top floor showdown",
+      "floors": [
+        "f2"
+      ]
+    },
+    {
+      "id": "downstairs",
+      "name": "Downstairs only",
+      "floors": [
+        "f1"
+      ]
+    },
+    {
+      "id": "basement",
+      "name": "Basement crawl",
+      "floors": [
+        "f0"
+      ]
+    },
+    {
+      "id": "house",
+      "name": "Whole house",
+      "floors": [
+        "f2",
+        "f1",
+        "f0"
+      ]
+    }
+  ],
+  "_tasks": "Chores, honestly done, in the room listed. Each player gets 4 at random from the rooms of the chosen level. The hold button only counts while the server believes you are in that room.",
+  "tasks": [
+    {
+      "room": "bed1",
+      "name": "Fluff every pillow in this room"
+    },
+    {
+      "room": "bed1",
+      "name": "Fold one item of clothing and put it away"
+    },
+    {
+      "room": "bed2",
+      "name": "Make one bed properly"
+    },
+    {
+      "room": "bed2",
+      "name": "Line up the shoes by the door of this room"
+    },
+    {
+      "room": "bath",
+      "name": "Wipe one patch of the mirror"
+    },
+    {
+      "room": "bath",
+      "name": "Fold a towel into thirds and stack it"
+    },
+    {
+      "room": "down",
+      "name": "Load one dish into the dishwasher"
+    },
+    {
+      "room": "down",
+      "name": "Wipe one section of the table"
+    },
+    {
+      "room": "down",
+      "name": "Put the TV remote back on its spot"
+    },
+    {
+      "room": "down",
+      "name": "Turn off one lamp that is on (or switch one on)"
+    },
+    {
+      "room": "land2",
+      "name": "Carry one thing that does not belong back upstairs"
+    },
+    {
+      "room": "land1",
+      "name": "Pick up one item from the stairs and return it"
+    },
+    {
+      "room": "land0",
+      "name": "Bring one thing from the basement up to the landing"
+    },
+    {
+      "room": "base1",
+      "name": "Stack anything stackable in this room"
+    },
+    {
+      "room": "base2",
+      "name": "Find one labelled item and put it where it belongs"
+    }
+  ],
+  "beacons": []
+}

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLE repeat test</title>
+<style>
+body{margin:0;padding:12px;background:#0f1530;color:#e8ecff;font:17px/1.5 system-ui,sans-serif}
+h1{font-size:1.2rem;color:#ffd23f}
+button{display:block;width:100%;margin:8px 0;padding:16px;font-size:1.05rem;font-weight:700;border:0;border-radius:10px;background:#ffd23f;color:#111}
+button.alt{background:#7aa2ff}
+#log{white-space:pre-wrap;background:#0a0e22;border:1px solid #2b3568;border-radius:10px;padding:10px;font:13px/1.45 ui-monospace,monospace;max-height:55vh;overflow:auto}
+.ok{color:#4ade80}.bad{color:#ff8a9b}.dim{color:#93a0d5}
+</style>
+</head>
+<body>
+<h1>BLE repeat test</h1>
+<p>Does the scan keep re-reporting the SAME beacon, or only once? Tap A, wait 25s. Stay put.</p>
+<button id="a">A. keepRepeatedDevices: TRUE</button>
+<button id="b" class="alt">B. keepRepeatedDevices: FALSE</button>
+<div id="log"></div>
+<script>
+const $=(s)=>document.querySelector(s);
+const lines=[];
+function log(t,c){const d=document.createElement('div');if(c)d.className=c;d.textContent=t;$('#log').appendChild(d);lines.push(t);}
+function rep(o){try{fetch('/api/diag',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(o)});}catch(e){}}
+const bth=navigator.bluetooth;
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+
+async function run(keep, tag){
+  const total={}, first={}, last={}, evs=[];
+  let n=0, t0=Date.now();
+  const h=(e)=>{const nm=(e.device&&(e.device.name||e.device.localName))||e.name||'?';
+    n++; total[nm]=(total[nm]||0)+1;
+    if(!first[nm])first[nm]=Date.now()-t0;
+    last[nm]=Date.now()-t0;
+    if(evs.length<50)evs.push(nm+'@'+(Date.now()-t0)+'ms');};
+  bth.addEventListener('advertisementreceived',h);
+  const scan=await bth.requestLEScan({acceptAllAdvertisements:true, keepRepeatedDevices: keep});
+  log('['+tag+'] scan started, keepRepeatedDevices='+keep+'. 25s...','ok');
+  await sleep(25000);
+  try{scan.stop();}catch(e){}
+  bth.removeEventListener('advertisementreceived',h);
+  const hb=Object.keys(total).filter(k=>k.startsWith('HB-'));
+  const hbEvents=hb.reduce((a,k)=>a+total[k],0);
+  log('['+tag+'] TOTAL events: '+n+'   distinct devices: '+Object.keys(total).length,'dim');
+  log('['+tag+'] HB- devices: '+hb.length+'  HB- events: '+hbEvents, hbEvents>hb.length?'ok':'bad');
+  for(const k of hb) log('   '+k+': '+total[k]+' event(s)  first@'+first[k]+'ms last@'+last[k]+'ms', total[k]>1?'ok':'bad');
+  rep({ev:'rep',tag,keep,totalEvents:n,distinct:Object.keys(total).length,hb,hbEvents,perDev:total,evs});
+  return {n,hbEvents,hb};
+}
+
+$('#a').onclick=async()=>{ lines.length=0; $('#log').innerHTML=''; log('=== A: keepRepeatedDevices TRUE ===');
+  try{ await run(true,'A'); }catch(e){ log('A threw '+e+' '+(e&&e.name),'bad'); rep({ev:'repErr',tag:'A',name:e&&e.name,msg:''+e}); } };
+
+$('#b').onclick=async()=>{ lines.length=0; $('#log').innerHTML=''; log('=== B: keepRepeatedDevices FALSE ===');
+  try{ await run(false,'B'); }catch(e){ log('B threw '+e+' '+(e&&e.name),'bad'); rep({ev:'repErr',tag:'B',name:e&&e.name,msg:''+e}); } };
+</script>
+</body>
+</html>

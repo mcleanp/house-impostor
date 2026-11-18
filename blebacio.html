@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>beacio BLE test</title>
+<style>
+body{margin:0;padding:12px;background:#0f1530;color:#e8ecff;font:17px/1.5 system-ui,sans-serif}
+h1{font-size:1.2rem;color:#ffd23f}
+button{display:block;width:100%;margin:10px 0;padding:16px;font-size:1.05rem;font-weight:700;border:0;border-radius:10px;background:#ffd23f;color:#111}
+button.alt{background:#7aa2ff}
+#log{white-space:pre-wrap;background:#0a0e22;border:1px solid #2b3568;border-radius:10px;padding:10px;font:13px/1.45 ui-monospace,monospace;max-height:58vh;overflow:auto}
+.ok{color:#4ade80}.bad{color:#ff8a9b}.dim{color:#93a0d5}
+</style>
+</head>
+<body>
+<h1>beacio BLE test</h1>
+<p><b>Tap button 1 first.</b> If it hears nothing, tap button 2. Stay put ~15s each.</p>
+<button id="b1">1. GLOBAL SCAN (requestLEScan - no picker)</button>
+<button id="b2" class="alt">2. PICK ONE + WATCH ALL</button>
+<div id="log"></div>
+<script>
+const $=(s)=>document.querySelector(s);
+const lines=[];
+function log(t,c){const d=document.createElement('div');if(c)d.className=c;d.textContent=t;$('#log').appendChild(d);lines.push(t);}
+function rep(o){try{fetch('/api/diag',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(o)});}catch(e){}}
+const bth=navigator.bluetooth;
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+let heard={}, t0=0;
+function onAd(tag){return (e)=>{const n=(e.device&&(e.device.name||e.device.localName))||e.name||'?';
+  if(!heard[n])heard[n]=e.rssi;
+  log('ADV '+n+' rssi='+e.rssi+' via '+tag+'  (+'+(Date.now()-t0)+'ms)','ok');};}
+window._k=[];
+
+$('#b1').onclick=async()=>{
+  t0=Date.now(); heard={};
+  log('=== B1: GLOBAL SCAN via requestLEScan (no picker) ===');
+  try{
+    const caps = bth.getCapabilities ? await bth.getCapabilities() : null;
+    log('getCapabilities: '+JSON.stringify(caps),'dim');
+    log('has requestLEScan: '+!!bth.requestLEScan+'   has backgroundSync: '+!!bth.backgroundSync,'dim');
+  }catch(e){}
+  try{
+    bth.addEventListener('advertisementreceived', onAd('lescan'));
+    const scan = await bth.requestLEScan({ acceptAllAdvertisements: true });
+    log('requestLEScan STARTED - no picker. 15s...','ok');
+    await sleep(15000);
+    try{ scan.stop(); }catch(e){}
+    const n=Object.keys(heard).length;
+    log('B1 result: '+n+' heard', n?'ok':'bad');
+    rep({ev:'b1',n,heard});
+  }catch(e){
+    log('B1 requestLEScan threw: '+e+' name='+(e&&e.name),'bad');
+    rep({ev:'b1err',name:e&&e.name,msg:''+e});
+  }
+};
+
+$('#b2').onclick=async()=>{
+  t0=Date.now(); heard={};
+  log('=== B2: pick ONE (with this tap) then watch ALL granted ===');
+  let picked=null;
+  try{
+    picked = await bth.requestDevice({ filters:[{namePrefix:'HB-'}] });
+    log('picked: '+(picked.name||'?'),'ok');
+    window._k.push(picked);
+    picked.addEventListener('advertisementreceived', onAd('picked'));
+    try{ await picked.watchAdvertisements(); log('watchAdvertisements on picked OK','ok'); }catch(e){ log('picked watch threw '+e,'bad'); }
+  }catch(e){ log('B2 requestDevice threw '+e+' name='+(e&&e.name),'bad'); rep({ev:'b2err',name:e&&e.name}); }
+
+  // now try the no-picker path for the rest
+  let g=[]; try{ g=await bth.getDevices(); }catch(e){}
+  const gh=g.filter(d=>(d.name||'').startsWith('HB-'));
+  log('getDevices now: '+g.length+' total, '+gh.length+' HB-','dim');
+  let w=0;
+  for(const d of gh){
+    if(d===picked)continue;
+    if(typeof d.watchAdvertisements!=='function'){ log('  '+(d.name||'?')+' has NO watchAdvertisements','dim'); continue; }
+    window._k.push(d); d.addEventListener('advertisementreceived', onAd('granted'));
+    try{ await d.watchAdvertisements(); w++; }catch(e){}
+  }
+  log('also watching '+w+' other granted handle(s)');
+  log('--- listening 15s: walk near your other beacons ---','dim');
+  await sleep(15000);
+  const n=Object.keys(heard);
+  log('--- B2 TOTAL distinct: '+n.length+'  '+n.join(', ')+' ---', n.length?'ok':'bad');
+  rep({ev:'b2done',distinct:n.length,heard,granted:gh.map(d=>d.name),lines:lines.slice(-40)});
+};
+</script>
+</body>
+</html>

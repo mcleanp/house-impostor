@@ -1,0 +1,15 @@
+# editor / OS
+.DS_Store
+*.swp
+# local backups of live files (the box keeps *.bak-<date> next to the originals)
+*.bak-*
+*.bak
+*.bak2
+*.bak3
+# aaPanel runtime files (not part of the project)
+.user.ini
+.well-known/
+404.html
+502.html
+# logs
+*.log
