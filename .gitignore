@@ -2,10 +2,7 @@
 .DS_Store
 *.swp
 # local backups of live files (the box keeps *.bak-<date> next to the originals)
-*.bak-*
-*.bak
-*.bak2
-*.bak3
+*.bak*
 # aaPanel runtime files (not part of the project)
 .user.ini
 .well-known/
