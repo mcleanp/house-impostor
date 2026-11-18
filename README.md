@@ -59,11 +59,18 @@ tracking. Android: Chrome works as-is. iOS freezes BLE when the screen sleeps
 ```
 server.js       authoritative engine: rooms, graph, RSSI, roles, tasks, votes
 house.json      the house: rooms/floors/doors/levels/tasks (host can edit in-game)
-public/         index.html app.js style.css config.js (no build step)
+index.html app.js style.css config.js   web client (no build step)
+admin.html admin-house.html guide.html  host setup / house editor / player guide
+ble*.html       BLE probe pages used while tuning beacon detection
 esp32/room_beacon/room_beacon.ino   beacon firmware (Arduino IDE, NimBLE-Arduino)
 sim.js          28 headless checks: fake phones + fake beacons vs a real server
 deploy-on-box.sh  idempotent deploy for the aaPanel box
 ```
+
+The tree is **flat on purpose**: it mirrors the live site folder 1:1 (the web
+client sits at the root next to `server.js`), so that folder is a plain git
+working copy — `git pull` there updates the live site, `git push` sends edits
+back.
 
 ## Run
 
@@ -75,19 +82,34 @@ node sim.js          # spawns its own server on :8399
 ## Deploy (aaPanel box, done this way already)
 
 ```
-tar czf house-among.tgz -C /srv/slchat/ws/u3/c167 house-among
-# scp via jumpbox to root@192.168.1.7, then:
-tar xzf house-among.tgz -C /tmp && bash /tmp/house-among/deploy-on-box.sh
+git clone https://github.com/mcleanp/house-impostor.git /tmp/house-impostor
+bash /tmp/house-impostor/deploy-on-box.sh
 ```
 
 The script installs everything **into the aaPanel site folder itself**
 (`/www/wwwroot/amongus.cubamclean.com`, the vhost root — same folder as the
-old project, visible in the panel's file manager): `public/*` at the root plus
-`server.js`, `house.json`, `sim.js`, `esp32/` alongside. It bumps asset `?v=`
-hashes (the vhost caches `.js` 12 h and Cloudflare happily caches that),
-installs systemd unit `house-among` (port 8322, paths inside the site folder),
-drops the WebSocket/beacon proxy into aaPanel's **extension dir** (never edits
-the vhost), verifies `/`, `/api/rules`, `/health` and a real `101` upgrade.
+old project, visible in the panel's file manager), flat: the web client at the
+root plus `server.js`, `house.json`, `sim.js`, `esp32/` alongside. It bumps
+asset `?v=` hashes (the vhost caches `.js` 12 h and Cloudflare happily caches
+that), installs systemd unit `house-among` (port 8322, paths inside the site
+folder), drops the WebSocket/beacon proxy into aaPanel's **extension dir**
+(never edits the vhost), verifies `/`, `/api/rules`, `/health` and a real `101`
+upgrade.
+
+### Live folder as a git working copy
+
+That site folder is also a git checkout, so day-to-day you never re-run the
+deploy script — you just pull (or push):
+
+```
+cd /www/wwwroot/amongus.cubamclean.com
+git pull        # take updates from GitHub
+git add -A && git commit -m "..." && git push   # send live edits back
+```
+
+After a `git pull` that changed `index.html`, hard-refresh the phone (the
+`?v=` hash busts the cache for you on the next deploy, but a pull edits files
+in place).
 
 ## Beacon setup (later, optional)
 

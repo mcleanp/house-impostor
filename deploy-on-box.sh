@@ -16,9 +16,11 @@ INC=$EXT/websocket.conf
 
 echo "== 1. files into $ROOT =="
 [ -f "$SRC/server.js" ] || { echo "   FAIL: $SRC/server.js missing"; exit 1; }
-[ -f "$SRC/public/index.html" ] || { echo "   FAIL: $SRC/public/index.html missing"; exit 1; }
+# the repo tree is flat (web client at the root); older tarballs nested it in public/
+if [ -d "$SRC/public" ]; then WEB="$SRC/public"; else WEB="$SRC"; fi
+[ -f "$WEB/index.html" ] || { echo "   FAIL: $WEB/index.html missing"; exit 1; }
 [ -d "$ROOT" ] || mkdir -p "$ROOT"
-cp -a "$SRC"/public/* "$ROOT"/
+cp -a "$WEB"/* "$ROOT"/
 cp -a "$SRC"/server.js "$SRC"/house.json "$SRC"/sim.js "$SRC"/README.md \
       "$SRC"/deploy-on-box.sh "$SRC"/esp32 "$ROOT"/
 # asset busting: vhost caches .js/.css 12h and Cloudflare happily caches that
