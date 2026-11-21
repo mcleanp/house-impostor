@@ -72,6 +72,25 @@ h2{font-size:.85rem;margin:.1rem 0 .6rem;color:var(--gold);text-transform:upperc
 #scr-join .card{background:linear-gradient(180deg,#1f3d73,#12264d)}
 #in-code{font-family:ui-monospace,monospace;letter-spacing:.45em;text-align:center;font-size:1.5rem;font-weight:800}
 
+/* colour picker: the sprite IS the swatch, so what you pick is what you see */
+.swatches{display:flex;flex-wrap:wrap;gap:.45rem;margin:.15rem 0 .7rem}
+.swatches button{
+  width:42px;height:48px;padding:0;border:0;border-radius:12px;background:#0a1a3c;
+  box-shadow:inset 0 0 0 2px var(--line);display:grid;place-items:center;
+}
+.swatches button .crew{transform:scale(1.25);pointer-events:none}
+.swatches button.on{box-shadow:inset 0 0 0 3px var(--gold), 0 0 14px rgba(255,210,63,.45);background:#3a2f0a}
+
+/* drifting crewmates behind the join card - decoration only */
+#floaters{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+#floaters .crew{position:absolute;opacity:.2;animation:drift 26s ease-in-out infinite alternate}
+#floaters .crew:nth-child(1){left:6%;top:18%;animation-delay:-2s}
+#floaters .crew:nth-child(2){left:84%;top:12%;animation-delay:-9s;animation-duration:32s}
+#floaters .crew:nth-child(3){left:72%;top:68%;animation-delay:-15s;animation-duration:22s}
+#floaters .crew:nth-child(4){left:12%;top:76%;animation-delay:-21s;animation-duration:29s}
+@keyframes drift{from{transform:translateY(-14px) rotate(-6deg)}to{transform:translateY(18px) rotate(6deg)}}
+@media (prefers-reduced-motion:reduce){#floaters .crew{animation:none}}
+
 /* ------------------------------------------------------------------ header */
 header{
   display:flex;justify-content:space-between;align-items:center;gap:.5rem;
@@ -84,6 +103,16 @@ header b{font-family:ui-monospace,monospace;letter-spacing:.2em;color:var(--gold
 .pill.crew{color:var(--crew);border-color:#2f6f92}
 .pill.impostor{color:var(--red);border-color:#7d2130;background:#2b0c14}
 .pill.dead{color:var(--dim)}
+.menu-btn{font:inherit;font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--ink);background:#0a1a3c;border:2px solid var(--line);border-radius:99px;padding:.12rem .6rem;box-shadow:none;cursor:pointer}
+.menu-btn:active{transform:none;box-shadow:none}
+.h-me{display:flex;align-items:center;gap:.35rem}
+/* drop-down menu, anchored under the sticky header */
+.menu{
+  position:sticky;top:3.4rem;z-index:7;display:flex;gap:.45rem;flex-wrap:wrap;
+  background:linear-gradient(180deg,#1f3d73,#12264d);border:2px solid var(--line);
+  border-radius:16px;padding:.55rem;margin:.45rem 0 .2rem;box-shadow:0 5px 0 #0a1730;
+}
+.menu button{flex:1 1 auto;padding:.55rem .7rem;font-size:.9rem}
 .btnrow{display:flex;flex-wrap:wrap;gap:.45rem;margin-top:.5rem}
 .btnrow button{flex:1 1 auto}
 
@@ -102,6 +131,18 @@ header b{font-family:ui-monospace,monospace;letter-spacing:.2em;color:var(--gold
 .crew.big{width:64px;height:80px;transform:scale(1)}
 .crew.big::before{border-radius:26px 26px 10px 10px;box-shadow:inset 0 0 0 5px rgba(0,0,0,.35)}
 .crew.big::after{left:-14px;top:20px;width:18px;height:34px;border-radius:10px;box-shadow:inset 0 0 0 5px rgba(0,0,0,.35)}
+
+/* lobby: the crew lined up before the round */
+.lobby-crew{
+  display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;align-items:flex-end;
+  padding:.8rem .6rem;margin:.7rem 0;border:2px dashed var(--line);border-radius:16px;
+  background:radial-gradient(600px 120px at 50% 100%, rgba(56,189,248,.16), transparent 70%);
+}
+.lobby-crew .crew{width:22px;height:28px;animation:bob 2.4s ease-in-out infinite alternate}
+.lobby-crew .crew:nth-child(2n){animation-delay:-.8s}
+.lobby-crew .crew:nth-child(3n){animation-delay:-1.6s}
+@keyframes bob{from{transform:translateY(0)}to{transform:translateY(-5px)}}
+@media (prefers-reduced-motion:reduce){.lobby-crew .crew{animation:none}}
 
 /* -------------------------------------------------------------- floorplan */
 #floorplan{display:flex;flex-direction:column-reverse;gap:.5rem;margin:.7rem 0}

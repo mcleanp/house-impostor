@@ -56,6 +56,10 @@ class Conn {
     this.onmessage = null;
     this.onclose = null;
     socket.on('data', (d) => this._onData(d));
+    // The browser/web client sends a FIN, not an RST. Node sockets are
+    // half-open by default, so without this the close never fires: a player
+    // who shut the tab looked connected forever (and the player row lingered).
+    socket.on('end', () => { try { socket.end(); } catch {} });
     socket.on('close', () => this._dead());
     socket.on('error', () => this._dead());
   }
@@ -589,7 +593,7 @@ function snapshotFor(room, p) {
       emergencyLeft: room.state === 'playing' && p.alive && !room.emergencyUsed.has(p.id),
     },
     people: visible.map((q) => ({
-      id: q.id, name: q.name, room: q.room,
+      id: q.id, name: q.name, room: q.room, color: q.color,
       alive: q.alive,
       role: (p.director || !p.alive) ? q.role : undefined,   // ghosts and director see all roles
     })),
@@ -704,6 +708,13 @@ function handleMsg(room, p, msg) {
       break;
     }
     case 'ping': p.conn.send({ t: 'pong', now: Date.now() }); break;
+    case 'color': {
+      const c = String(msg.color || '');
+      if (!/^#[0-9a-fA-F]{6}$/.test(c)) return;
+      p.color = c.toUpperCase();
+      broadcastState(room);
+      break;
+    }
   }
 }
 
@@ -859,10 +870,11 @@ server.on('upgrade', (req, socket) => {
   const want = String(usp.get('pid') || '').replace(/[^\w]/g, '').slice(0, 24);
   const id = want || ('p' + crypto.randomBytes(5).toString('hex'));
   const director = usp.get('director') === '1';
+  const color = /^#[0-9a-fA-F]{6}$/.test(String(usp.get('color') || '')) ? String(usp.get('color')).toUpperCase() : null;
   const prev = room.players.get(id);
   if (prev) { try { prev.conn.close(); } catch {} }   // drop the stale socket for this id
   const player = {
-    id, name, conn, joined: true, director, role: undefined, alive: true,
+    id, name, conn, joined: true, director, color, role: undefined, alive: true,
     room: director ? (HOUSE.rooms.find((r) => !r.lobby) || {}).id : null, roomSource: 'join',
     tasks: [], hold: null, movedAt: 0, lastSeen: Date.now(),
   };
@@ -870,11 +882,12 @@ server.on('upgrade', (req, socket) => {
     player.role = prev.role; player.alive = prev.alive;
     player.room = prev.room; player.roomSource = prev.roomSource;
     player.tasks = prev.tasks; player.hold = prev.hold;
+    if (!color) player.color = prev.color;
   }
   if (!room.hostId && !director) room.hostId = id;
   room.players.set(id, player);
   if (!room.order.includes(id)) room.order.push(id);
-  conn.send({ t: 'welcome', id, code: room.code, hostId: room.hostId, name, director });
+  conn.send({ t: 'welcome', id, code: room.code, hostId: room.hostId, name, director, color: player.color });
   conn.send(snapshotFor(room, player));
   roomEvent(room, { type: 'join', text: `${name}${director ? ' (director)' : ''} ${prev ? 'rejoined' : 'joined'} (${alivePlayers(room).length} playing).` });
   broadcastState(room, id);
@@ -885,20 +898,28 @@ server.on('upgrade', (req, socket) => {
     if (!msg || typeof msg.t !== 'string') return;
     try { handleMsg(room, player, msg); } catch (e) { console.error('handler', msg.t, e); }
   };
+  // A refresh closes the old socket a moment before the new one arrives, so a
+  // close does not remove the player at once: it waits out a short grace period
+  // and only then cleans up. Without this, refreshing as host handed the host
+  // role to somebody else and logged a leave/join every time.
   conn.onclose = () => {
-    room.players.delete(id);
-    room.votes.delete(id);
-    sightings.delete(id);
-    if (room.hostId === id) {
-      const next = [...room.players.values()].find((x) => x.joined && !x.director);
-      room.hostId = next ? next.id : null;
-      if (next) roomEvent(room, { type: 'host', text: `${next.name} is now the host.` });
-    }
-    if (room.players.size === 0) { rooms.delete(room.code); return; }
-    roomEvent(room, { type: 'leave', text: `${name} disconnected.` });
-    if (room.state === 'meeting' && room.votes.size >= alivePlayers(room).length) endMeeting(room);
-    checkWin(room);
-    broadcastState(room);
+    if (room.players.get(id) !== player) return;   // already replaced by a rejoin
+    setTimeout(() => {
+      if (room.players.get(id) !== player) return; // rejoined inside the grace period
+      room.players.delete(id);
+      room.votes.delete(id);
+      sightings.delete(id);
+      if (room.hostId === id) {
+        const next = [...room.players.values()].find((x) => x.joined && !x.director);
+        room.hostId = next ? next.id : null;
+        if (next) roomEvent(room, { type: 'host', text: `${next.name} is now the host.` });
+      }
+      if (room.players.size === 0) { rooms.delete(room.code); return; }
+      roomEvent(room, { type: 'leave', text: `${name} disconnected.` });
+      if (room.state === 'meeting' && room.votes.size >= alivePlayers(room).length) endMeeting(room);
+      checkWin(room);
+      broadcastState(room);
+    }, 4000);
   };
 });
 

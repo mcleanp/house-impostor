@@ -25,6 +25,25 @@ function newCode() {
   return c;
 }
 
+// Colour is cosmetic and only ever sent as a hex string the server re-validates.
+const COLORS = ['#ff4d5e', '#38bdf8', '#4ade80', '#ffd23f', '#c084fc', '#fb923c', '#f472b6', '#22d3ee', '#a3e635', '#94a3b8', '#e879f9', '#f8fafc'];
+let myColor = '#7dd3fc';
+function loadColor() {
+  const c = (localStorage.getItem('hi-color') || '').toUpperCase();
+  myColor = COLORS.includes(c) ? c : COLORS[Math.floor(Math.random() * COLORS.length)];
+}
+function drawSwatches() {
+  const el = $('#swatches');
+  el.innerHTML = COLORS.map((c) => `<button type="button" role="radio" data-c="${c}" aria-checked="${c === myColor}" class="${c === myColor ? 'on' : ''}"><span class="crew" style="--c:${c}"></span></button>`).join('');
+  el.querySelectorAll('[data-c]').forEach((b) => b.addEventListener('click', () => {
+    myColor = b.dataset.c;
+    try { localStorage.setItem('hi-color', myColor); } catch {}
+    drawSwatches();
+    if (me) send({ t: 'color', color: myColor });   // live change, no rejoin
+    if (S) render();
+  }));
+}
+
 function connect() {
   const name = ($('#in-name').value || '').trim() || 'player';
   const code = ($('#in-code').value || '').trim().toUpperCase();
@@ -32,7 +51,13 @@ function connect() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   // Keep our player id so a refresh re-joins as the SAME player (server reuses it).
   const pid = localStorage.getItem('hi-pid') || '';
-  ws = new WebSocket(`${proto}//${location.host}/ws?room=${code}&name=${encodeURIComponent(name)}&director=${director}&pid=${encodeURIComponent(pid)}`);
+  // Remember the room, so a refresh lands straight back in it instead of the join form.
+  try {
+    localStorage.setItem('hi-room', code);
+    localStorage.setItem('hi-director', director);
+    localStorage.setItem('hi-name', name);
+  } catch {}
+  ws = new WebSocket(`${proto}//${location.host}/ws?room=${code}&name=${encodeURIComponent(name)}&director=${director}&color=${encodeURIComponent(myColor)}&pid=${encodeURIComponent(pid)}`);
   ws.onmessage = (e) => {
     let m; try { m = JSON.parse(e.data); } catch { return; }
     onMsg(m);
@@ -45,10 +70,25 @@ function connect() {
   ws.onopen = () => { reconnectDelay = 800; };
 }
 
+// Leave on purpose: drop the stored id so we come back as a new player, and
+// forget the room so a reload shows the join screen.
+function leaveGame() {
+  try { localStorage.removeItem('hi-pid'); localStorage.removeItem('hi-room'); } catch {}
+  me = null; S = null;
+  if (ws) { ws.onclose = null; try { ws.close(); } catch {} ws = null; }
+  $('#menu').hidden = true;
+  $('#btn-menu').setAttribute('aria-expanded', 'false');
+  $('#scr-game').hidden = true;
+  $('#scr-join').hidden = false;
+  $('#in-code').value = '';
+  window.scrollTo(0, 0);
+}
+
 function onMsg(m) {
   switch (m.t) {
     case 'welcome':
       me = { id: m.id, name: m.name, hostId: m.hostId, director: !!m.director };
+      if (m.color) myColor = m.color;
       try { localStorage.setItem('hi-pid', m.id); } catch {}   // survive a refresh
       $('#scr-join').hidden = true;
       $('#scr-game').hidden = false;
@@ -72,6 +112,10 @@ function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 // Crewmate colour per player, stable across renders so you can learn who is who.
 const CREW_COLORS = ['#ff4d5e', '#38bdf8', '#4ade80', '#ffd23f', '#c084fc', '#fb923c', '#f472b6', '#22d3ee', '#a3e635', '#facc15', '#94a3b8', '#e879f9'];
 function crewColor(id) {
+  // Your own chosen colour wins; everyone else is derived from their id.
+  if (me && id === me.id && myColor) return myColor;
+  const p = S && (S.people || []).find((q) => q.id === id);
+  if (p && p.color) return p.color;
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
   return CREW_COLORS[Math.abs(h) % CREW_COLORS.length];
@@ -129,8 +173,9 @@ function render() {
   if (!S || !me) return;
   me.hostId = S.hostId;
   $('#h-code').textContent = S.code;
-  $('#h-state').textContent = S.state;
+  $('#btn-menu').textContent = S.state + ' ▾';
   $('#h-prog').textContent = (S.progress || 0) + '%';
+  $('#h-crew').style.setProperty('--c', myColor);
 
   const you = S.you || {};
   const roleEl = $('#h-role');
@@ -139,6 +184,16 @@ function render() {
   else if (!you.alive && S.state !== 'lobby') { roleEl.textContent = 'OUT'; roleEl.classList.add('dead'); }
   else if (you.role) { roleEl.textContent = you.role.toUpperCase(); roleEl.classList.add(you.role); }
   else roleEl.textContent = '';
+
+  // Lobby dressing: a row of crewmates waiting in the airlock, in everyone's colours.
+  const lob = $('#lobby-crew');
+  if (lob) {
+    if (S.state === 'lobby') {
+      const ids = [me.id, ...(S.people || []).map((p) => p.id)];
+      lob.innerHTML = ids.slice(0, 12).map((id) => crew(id, false)).join('');
+      lob.hidden = false;
+    } else lob.hidden = true;
+  }
 
   renderFloorplan();
   renderPeople();
@@ -704,6 +759,21 @@ window.addEventListener('DOMContentLoaded', () => {
   if (params.get('room')) $('#in-code').value = params.get('room').toUpperCase().slice(0, 4);
   if (params.get('director') === '1') $('#in-director').checked = true;
   $('#in-name').value = localStorage.getItem('hi-name') || '';
+  loadColor();
+  drawSwatches();
+  // Decorative crewmates on the join screen.
+  $('#floaters').innerHTML = COLORS.slice(0, 4).map((c) => `<span class="crew" style="--c:${c}"></span>`).join('');
+
+  // A refresh (or coming back from another tab) rejoins the room you were in.
+  const savedRoom = (localStorage.getItem('hi-room') || '').toUpperCase();
+  const savedPid = localStorage.getItem('hi-pid') || '';
+  if (savedRoom && savedPid) {
+    $('#in-code').value = savedRoom;
+    $('#in-director').checked = localStorage.getItem('hi-director') === '1';
+    $('#scr-join').hidden = true;
+    $('#scr-game').hidden = false;
+    connect();
+  }
 
   fetch('/api/rules').then((r) => r.json()).then((r) => { window.RULES = r; }).catch(() => {});
 
@@ -726,6 +796,21 @@ window.addEventListener('DOMContentLoaded', () => {
     $('#in-code').value = newCode();
     localStorage.setItem('hi-name', $('#in-name').value);
     connect();
+  });
+  $('#btn-menu').addEventListener('click', () => {
+    const open = $('#menu').hidden;
+    $('#menu').hidden = !open;
+    $('#btn-menu').setAttribute('aria-expanded', String(open));
+  });
+  $('#btn-menu-close').addEventListener('click', () => {
+    $('#menu').hidden = true;
+    $('#btn-menu').setAttribute('aria-expanded', 'false');
+  });
+  $('#btn-leave').addEventListener('click', leaveGame);
+  $('#btn-copy').addEventListener('click', async () => {
+    const url = `${location.origin}/?room=${encodeURIComponent(($('#h-code').textContent || '').trim())}`;
+    try { await navigator.clipboard.writeText(url); toast('Invite link copied.'); }
+    catch { toast(url, null, 9000); }
   });
   $('#btn-start').addEventListener('click', () => send({ t: 'start', level: $('#sel-level').value }));
   $('#btn-reset').addEventListener('click', () => send({ t: 'reset' }));

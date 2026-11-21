@@ -4,17 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>House Impostor</title>
-<link rel="stylesheet" href="style.css?v=ui3">
+<link rel="stylesheet" href="style.css?v=ui4">
 </head>
 <body>
 
 <!-- join -->
 <section id="scr-join" class="screen">
-  <div class="hero"><img src="img-hero.jpg?v=ui3" alt="Crewmates" width="960" height="540"></div>
+  <div class="hero"><img src="img-hero.jpg?v=ui4" alt="Crewmates" width="960" height="540"></div>
+  <div id="floaters" aria-hidden="true"></div>
   <div class="card">
     <h1>House<br><span>Impostor</span></h1>
     <p class="sub">Live-action Among Us in your own house. Rooms by BLE beacon or by tapping the door you walked through. One impostor, chores as tasks, no app.</p>
     <label>Name <input id="in-name" maxlength="18" autocomplete="off"></label>
+    <label>Your colour</label>
+    <div id="swatches" class="swatches" role="radiogroup" aria-label="Crewmate colour"></div>
     <label>Room code <input id="in-code" maxlength="4" autocapitalize="characters" autocomplete="off" placeholder="KEYS"></label>
     <button id="btn-join" class="big">Join lobby</button>
     <button id="btn-new" class="ghost">New house (make a room)</button>
@@ -27,11 +30,17 @@
 <!-- game -->
 <section id="scr-game" class="screen" hidden>
   <header>
-    <div><b id="h-code">----</b> <span id="h-state" class="pill">lobby</span></div>
-    <div id="h-role" class="pill"></div>
+    <div><b id="h-code">----</b> <button id="btn-menu" class="pill menu-btn" aria-expanded="false">lobby ▾</button></div>
+    <div class="h-me"><span id="h-crew" class="crew"></span><span id="h-role" class="pill"></span></div>
     <div>tasks <b id="h-prog">0%</b></div>
   </header>
+  <div id="menu" class="menu" hidden>
+    <button id="btn-copy" class="ghost">Copy invite link</button>
+    <button id="btn-leave" class="danger">Leave game</button>
+    <button id="btn-menu-close" class="ghost">Close</button>
+  </div>
 
+  <div id="lobby-crew" class="lobby-crew" hidden></div>
   <div id="floorplan"></div>
 
   <div id="panel-people" class="card">
@@ -101,7 +110,7 @@
 
 <div id="toast"></div>
 
-<script src="config.js?v=ui3"></script>
-<script src="app.js?v=ui3"></script>
+<script src="config.js?v=ui4"></script>
+<script src="app.js?v=ui4"></script>
 </body>
 </html>
