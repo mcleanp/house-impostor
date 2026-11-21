@@ -246,12 +246,26 @@ code, state, players, host — with join/watch links, refreshing every 5
 s.</li>
 <li>Fog of war: you only see people in your room.</li>
 </ul>
-<h2 id="iphone-caveat-stated-plainly">iPhone caveat, stated plainly</h2>
-<p>Web Bluetooth is <strong>not</strong> in any iOS browser (Apple has
-not shipped it as of 2026). iPhone players either tap doors (fully
-playable) or open the same URL in the free <strong>Bluefy</strong>
-browser, which has Web Bluetooth, to get beacon tracking. Android:
-Chrome works as-is. iOS freezes BLE when the screen sleeps — keep the
+<h2 id="iphone-caveat-stated-plainly">iPhone / iPad setup (beacio)</h2>
+<p>iOS Safari has no Web Bluetooth of its own. The free <strong>beacio</strong>
+Safari extension adds it, so you keep using normal Safari - no second browser
+to install, no app to switch to. It is a one-time, 30-second setup:</p>
+<ol type="1">
+<li>Install <strong>beacio</strong> from the App Store (free, no account):
+<a href="https://apps.apple.com/us/app/beacio/id6761301368">apps.apple.com/us/app/beacio/id6761301368</a>.</li>
+<li><strong>Settings &gt; Apps &gt; Safari &gt; Extensions &gt; beacio</strong> -
+turn on <strong>Allow Extension</strong>, then under <strong>Permission</strong>
+tap <strong>Other Websites</strong> and choose <strong>Allow</strong>.</li>
+<li>Or from Safari itself: tap the <strong>aA</strong> button in the address
+bar &gt; <strong>Manage Extensions</strong> &gt; switch beacio on &gt;
+<strong>Done</strong>, then tap <strong>aA</strong> &gt; beacio &gt;
+<strong>Allow on Every Website</strong>.</li>
+<li>Reload this page. The first time it needs Bluetooth, iOS asks once -
+tap <strong>Allow</strong>.</li>
+</ol>
+<p>Then tap <strong>Join</strong> as normal: the scan starts by itself and the
+room follows you. Without the extension you can still play by tapping doors.
+Android: Chrome works as-is. iOS freezes BLE when the screen sleeps - keep the
 screen on during a round.</p>
 <h2 id="files">Files</h2>
 <pre><code>server.js       authoritative engine: rooms, graph, RSSI, roles, tasks, votes
@@ -288,7 +302,7 @@ folder), drops the WebSocket/beacon proxy into aaPanel’s
 <code>ROOM = "bed1"</code> (one per board). Flash, plug into a USB
 brick, place in the room.</li>
 <li>The Setup screen lists beacons reporting in within seconds.</li>
-<li>Players running Chrome/Bluefy tap “Pair my beacons” once per nearby
+<li>Players on Chrome or iPhone-with-beacio tap “Pair my beacons” once per nearby
 beacon.</li>
 </ol>
 </body>

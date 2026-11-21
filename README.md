@@ -50,7 +50,8 @@ where:
 
 Web Bluetooth is **not** in any iOS browser (Apple has not shipped it as of
 2026). iPhone players either tap doors (fully playable) or open the same URL
-in the free **Bluefy** browser, which has Web Bluetooth, to get beacon
+with the free **beacio** Safari extension turned on (it adds Web Bluetooth to
+Safari; steps in guide.html), to get beacon
 tracking. Android: Chrome works as-is. iOS freezes BLE when the screen sleeps
 — keep the screen on during a round.
 
@@ -117,4 +118,4 @@ in place).
 2. In `room_beacon.ino`: WiFi creds, `SERVER_URL = http://192.168.1.7/api/beacon`,
    `ROOM = "bed1"` (one per board). Flash, plug into a USB brick, place in the room.
 3. The Setup screen lists beacons reporting in within seconds.
-4. Players running Chrome/Bluefy tap "Pair my beacons" once per nearby beacon.
+4. Players on Chrome or iPhone-with-beacio tap "Pair my beacons" once per nearby beacon.

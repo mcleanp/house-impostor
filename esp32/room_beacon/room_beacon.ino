@@ -121,7 +121,7 @@ void setup() {
   // IMPORTANT: NimBLEDevice::init(name) only sets the GAP name ATTRIBUTE - it
   // does NOT put the name in the advertising packet, and startAdvertising()
   // does not add it either. Without adv->setName() the board advertises with
-  // NO name at all, so a chooser filtering on namePrefix "HB-" (Bluefy/Chrome)
+  // NO name at all, so a chooser filtering on namePrefix "HB-" (beacio/Chrome)
   // finds nothing and the phone can never connect. Set it explicitly here.
   NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
   adv->setName(fullName.c_str());

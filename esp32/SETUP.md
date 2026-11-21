@@ -205,14 +205,14 @@ All boards advertise their own unique name (`HB-bed1`, `HB-bed2`, etc.). The ser
 1. Open `https://amongus.cubamclean.com` in Safari
 2. Tap **Pair my beacons**
 3. Safari shows "No Web Bluetooth in this browser" — that's expected
-4. Install the free **Bluefy** browser from the App Store
-5. Open the same URL in Bluefy and tap **Pair my beacons**
-6. Bluefy has Web Bluetooth, so you'll see your beacons listed
+4. Install the free **beacio** Safari extension from the App Store
+5. Settings > Apps > Safari > Extensions > beacio > Allow Extension, then Other Websites > Allow; open the URL in Safari and tap **Pair my beacons**
+6. beacio gives Safari Web Bluetooth, so you'll see your beacons listed
 7. Tap each to pair
 
 ### Important notes
 
-- **Keep the screen on** during a round — iOS freezes BLE when the screen sleeps (Bluefy too)
+- **Keep the screen on** during a round — iOS freezes BLE when the screen sleeps (with beacio too)
 - **One pairing per beacon per phone** — tap each beacon once, then they're paired for that game
 - If you don't pair, the game still works — you just tap the door you walked through instead of BLE auto-detect
 

@@ -499,7 +499,7 @@ function buildHouseEditor() {
 
 /* ------------------------------------------------------------------- BLE */
 // Silent re-pair: getDevices() returns devices this origin was already granted
-// (Bluefy/Chrome support it). On join we re-attach to every approved beacon with
+// (beacio/Chrome support it). On join we re-attach to every approved beacon with
 // NO chooser, so players pair once and later games are automatic.
 async function autoReconnectBeacons() {
   if (!navigator.bluetooth || !navigator.bluetooth.getDevices) return;
@@ -535,7 +535,7 @@ async function sendIam(dev) {
 async function pairBeacon() {
   const st = $('#ble-status');
   if (!navigator.bluetooth) {
-    st.textContent = 'No Web Bluetooth in this browser. iPhone Safari: install the free "Bluefy" browser and open this page in it. Until then, tap your doors - the game works.';
+    st.textContent = 'No Web Bluetooth in this browser. iPhone: install the free "beacio" Safari extension and turn it on (see the warning on the join screen). Until then, tap your doors - the game works.';
     return;
   }
   try {
@@ -559,7 +559,7 @@ async function pairBeacon() {
 // The phone listens for HB-* advertisements and posts what it hears to the
 // server; the SERVER works out the room (same RSSI pipeline as the boards).
 // No connecting, no chooser, no per-beacon pairing. Needs an API that reports
-// advertisements: bluetooth.watchAdvertisements (Bluefy / Chromium) or
+// advertisements: bluetooth.watchAdvertisements (beacio / Chromium) or
 // navigator.bluetooth.requestLEScan. Both need a user gesture to start.
 let scanArmed = false, seen = {}, lescan = null, sampleTimer = null, scanDevs = [];
 let lastAdvertAt = 0, lastRestartAt = 0, restarting = false, newBeaconTimer = null;
@@ -609,33 +609,32 @@ function diag(o) {
 // choosers. The phone never connects to a beacon.
 async function armScan() {
   const st = $('#ble-status');
-  if (!navigator.bluetooth) { st.textContent = 'No Web Bluetooth here. iPhone: open this page in the free "Bluefy" browser.'; return; }
+  if (!navigator.bluetooth) { st.textContent = 'No Web Bluetooth here. iPhone: turn on the free "beacio" Safari extension (steps on the join screen).'; return; }
   if (scanArmed) return;
   seen = {};
   let usedChooser = false, watching = 0, watchErr = '', pickErr = '', pickMs = 0, devNames = [], globalScan = false;
   // Three shapes exist in the wild; use whichever this browser has.
-  //  - Bluefy: navigator.bluetooth.watchAdvertisements()  (GLOBAL scan, no picker at all)
-  //  - Chromium standard: device.watchAdvertisements()     (event on the device)
-  //  - Chromium legacy:   navigator.bluetooth.requestLEScan() (event on navigator.bluetooth)
+  //  - beacio / Chromium: navigator.bluetooth.requestLEScan() (GLOBAL scan, no picker)
+  //  - navigator.bluetooth.watchAdvertisements()             (GLOBAL scan, no picker)
+  //  - Chromium per-device: device.watchAdvertisements()     (event on the device)
   try {
     // Keep the screen awake while scanning - iOS freezes BLE when it sleeps.
     try { if (navigator.bluetooth.setScreenDimEnabled) navigator.bluetooth.setScreenDimEnabled(true); } catch {}
     if (navigator.bluetooth.requestLEScan) {
-      // beacio (Safari extension) / Chromium: TRUE global scan - hears every
-      // surrounding device, no chooser at all. Confirmed on-device: 16 devices in
-      // range incl. both beacons, no picker. onAdvert filters to HB-*.
+      // Global scan on the navigator: hears EVERY surrounding beacon, no chooser.
+      // onAdvert filters to HB-*.
       navigator.bluetooth.addEventListener('advertisementreceived', onAdvert);
       lescan = await navigator.bluetooth.requestLEScan({ acceptAllAdvertisements: true, keepRepeatedDevices: true });
       globalScan = true; watching = 1;
     } else if (navigator.bluetooth.watchAdvertisements) {
-      // Bluefy global scan (needs the app's advertisement feature ON): hears EVERY
-      // surrounding beacon, no chooser, nothing for the player to pick.
+      // Global scan on the navigator: hears EVERY surrounding beacon, no chooser,
+      // nothing for the player to pick.
       navigator.bluetooth.addEventListener('advertisementreceived', onAdvert);
       try { await navigator.bluetooth.watchAdvertisements({ acceptAllAdvertisements: true }); }
       catch { await navigator.bluetooth.watchAdvertisements(); }
       globalScan = true; watching = 1;
     } else {
-      // Bluefy: watch EVERY beacon this phone was granted - no picker.
+      // Per-device: watch EVERY beacon this phone was granted - no picker.
       // On-device evidence (bleprime T1/T2/T3): granted handles alone stay SILENT;
       // the scan only starts once requestDevice() is called, and it then primes
       // every watched handle (the adverts arrive on the granted listeners, not the
@@ -777,12 +776,23 @@ window.addEventListener('DOMContentLoaded', () => {
 
   fetch('/api/rules').then((r) => r.json()).then((r) => { window.RULES = r; }).catch(() => {});
 
+  // No Web Bluetooth here. On iOS that is Safari without the beacio extension -
+  // give the exact one-time steps instead of a vague "use another browser".
+  const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (!('bluetooth' in navigator)) {
-    const iOS = /iPhone|iPad/.test(navigator.userAgent);
     $('#ble-warn').hidden = false;
-    $('#ble-warn').textContent = iOS
-      ? 'iPhone: for automatic room detection open this page in the free "Bluefy" browser (Safari has no Bluetooth on iPhone). Tapping doors works fine in Safari.'
-      : 'No Web Bluetooth here - you can still play by tapping the door you walk through.';
+    if (iOS) {
+      $('#ble-warn').innerHTML =
+        '<b>iPhone / iPad: one-time setup for automatic room detection.</b><br>' +
+        '1. Install the free <b>beacio</b> extension from the App Store (<a href="https://apps.apple.com/us/app/beacio/id6761301368" target="_blank" rel="noopener">open it</a>).<br>' +
+        '2. Settings &gt; Apps &gt; Safari &gt; Extensions &gt; beacio &gt; turn on <b>Allow Extension</b>, then under Permission choose <b>Other Websites &gt; Allow</b>.<br>' +
+        '3. Or in Safari: tap the <b>aA</b> button in the address bar &gt; Manage Extensions &gt; beacio on &gt; Done, then tap <b>aA</b> &gt; beacio &gt; <b>Allow on Every Website</b>.<br>' +
+        '4. Reload this page. iOS asks once to let beacio use Bluetooth - tap <b>Allow</b>.<br>' +
+        'No extension? Tapping the doors still plays fine.';
+    } else {
+      $('#ble-warn').textContent = 'No Web Bluetooth here - you can still play by tapping the door you walk through.';
+    }
   }
 
   $('#btn-join').addEventListener('click', () => {

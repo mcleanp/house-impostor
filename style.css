@@ -63,6 +63,8 @@ h1 span{color:var(--gold)}
 h2{font-size:.85rem;margin:.1rem 0 .6rem;color:var(--gold);text-transform:uppercase;letter-spacing:.12em}
 .sub{color:var(--dim);font-size:.84rem}
 .warn{color:var(--gold);font-size:.85rem;font-weight:700}
+.warn a{color:var(--cyan)}
+#ble-warn{background:#2b2410;border:2px solid var(--gold);border-radius:12px;padding:.6rem .7rem;line-height:1.5}
 
 /* ------------------------------------------------------------------- join */
 #scr-join{padding-top:.7rem}
