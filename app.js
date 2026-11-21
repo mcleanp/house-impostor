@@ -5,7 +5,7 @@
 const $ = (s) => document.querySelector(s);
 const CFG = window.CFG || {};
 let ws = null, me = null, S = null;   // S = last server snapshot
-let holdTimer = null, holdTask = null, holdAt = 0;
+let holdTimer = null, holdTask = null, holdAt = 0, meetingSounded = false;
 let reconnectDelay = 800;
 
 /* ------------------------------------------------------------------ toast */
@@ -59,6 +59,7 @@ function onMsg(m) {
     case 'died':
       toast(`You are dead. Walk to the lobby. (${m.room})`, 'bad', 8000);
       if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+      blip('kill');
       break;
     case 'nope': toast(m.text, 'bad'); break;
     case 'ok': break;
@@ -66,6 +67,59 @@ function onMsg(m) {
 }
 
 function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+
+/* ------------------------------------------------------------- game feel */
+// Crewmate colour per player, stable across renders so you can learn who is who.
+const CREW_COLORS = ['#ff4d5e', '#38bdf8', '#4ade80', '#ffd23f', '#c084fc', '#fb923c', '#f472b6', '#22d3ee', '#a3e635', '#facc15', '#94a3b8', '#e879f9'];
+function crewColor(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return CREW_COLORS[Math.abs(h) % CREW_COLORS.length];
+}
+function crew(id, dead) {
+  return `<span class="crew${dead ? ' dead' : ''}" style="--c:${crewColor(id)}"></span>`;
+}
+
+// Tiny WebAudio blips - no files, works offline, silently no-ops if blocked.
+let actx = null;
+function blip(kind) {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const t = actx.currentTime;
+    const beep = (f, at, dur, type) => {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = type || 'square'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t + at);
+      g.gain.exponentialRampToValueAtTime(0.16, t + at + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + dur);
+      o.connect(g).connect(actx.destination); o.start(t + at); o.stop(t + at + dur + 0.02);
+    };
+    if (kind === 'kill') { beep(220, 0, .12); beep(110, .1, .22); }
+    else if (kind === 'report') { beep(880, 0, .09); beep(660, .1, .09); beep(880, .2, .14); }
+    else if (kind === 'reveal') { beep(520, 0, .1); beep(780, .11, .18, 'triangle'); }
+    else { beep(660, 0, .07); }
+  } catch {}
+}
+
+// Role reveal: shown once per round, tap to dismiss.
+let revealFor = null, revealShown = false;
+function maybeReveal() {
+  const you = (S && S.you) || {};
+  if (S.state !== 'playing' || !you.role || me.director) { if (S.state !== 'playing') revealShown = false; return; }
+  if (revealShown && revealFor === you.role) return;
+  revealShown = true; revealFor = you.role;
+  const r = $('#reveal');
+  r.className = you.role;
+  $('#reveal-crew').style.setProperty('--c', you.role === 'impostor' ? '#ff4d5e' : crewColor(me.id));
+  $('#reveal-role').textContent = you.role === 'impostor' ? 'The Impostor' : 'Crewmate';
+  $('#reveal-hint').textContent = you.role === 'impostor'
+    ? 'Blend in. Kill when nobody is looking. Use the vents... well, the doors.'
+    : 'Do your chores. Watch who is where. Report what you find.';
+  r.hidden = false;
+  blip('reveal');
+  if ('vibrate' in navigator) navigator.vibrate(you.role === 'impostor' ? [120, 60, 120] : 60);
+}
+$('#reveal').addEventListener('click', () => { $('#reveal').hidden = true; });
 
 /* ----------------------------------------------------------------- render */
 function roomName(id) { const r = S && S.house.rooms.find((x) => x.id === id); return r ? r.name : id; }
@@ -91,6 +145,12 @@ function render() {
   renderTasks();
   renderSetup();
   renderFeed();
+
+  // Meeting siren, once per meeting (not on every 2 s snapshot).
+  if (S.state === 'meeting' && !meetingSounded) { meetingSounded = true; blip('report'); }
+  if (S.state !== 'meeting') meetingSounded = false;
+
+  maybeReveal();
 
   $('#scr-meeting').hidden = S.state !== 'meeting';
   if (S.state === 'meeting') renderMeeting();
@@ -123,7 +183,7 @@ function renderFloorplan() {
       const people = (S.people || []).filter((p) => p.room === r.id);
       const bodies = (S.bodies || []).filter((b) => b.room === r.id);
       const dots = people.map((p) =>
-        `<span class="dot ${p.id === me.id ? 'me' : ''} ${p.alive ? '' : 'dead'}" title="${esc(p.name)}"></span>`).join('');
+        `<span title="${esc(p.name)}${p.alive ? '' : ' (out)'}" style="${p.id === me.id ? 'filter:drop-shadow(0 0 4px #ffd23f)' : ''}">${crew(p.id, !p.alive)}</span>`).join('');
       const locked = you.moveTo && !you.moveTo.includes(r.id) && r.id !== here && !r.lobby && S.state === 'playing';
       return `<div class="room ${r.id === here ? 'here' : ''} ${locked ? 'locked' : ''}">
         ${esc(r.name)}${bodies.length ? '<span class="body">💀</span>' : ''}
@@ -139,8 +199,8 @@ function renderPeople() {
   const here = (S.people || []).filter((p) => p.room === you.room && p.id !== me.id);
   const el = $('#people');
   el.innerHTML = here.length
-    ? here.map((p) => `<div class="person"><span>${esc(p.name)} ${p.alive ? '' : '(down)'}${p.role ? ` <i>${p.role}</i>` : ''}</span>
-        ${you.role === 'impostor' && p.alive && you.alive ? `<button data-kill="${p.id}">Kill</button>` : ''}</div>`).join('')
+    ? here.map((p) => `<div class="person"><span class="who">${crew(p.id, !p.alive)}${esc(p.name)} ${p.alive ? '' : '(down)'}${p.role ? ` <i>${p.role}</i>` : ''}</span>
+        ${you.role === 'impostor' && p.alive && you.alive ? `<button class="danger" data-kill="${p.id}">Kill</button>` : ''}</div>`).join('')
     : '<p class="sub">Nobody. Spooky.</p>';
   el.querySelectorAll('[data-kill]').forEach((b) => b.addEventListener('click', () => send({ t: 'kill', victim: b.dataset.kill })));
 
@@ -208,7 +268,7 @@ function renderMeeting() {
   $('#m-votes').textContent = `votes in: ${S.votes ? S.votes.cast : 0} / ${S.votes ? S.votes.of : 0}`;
   const cands = (S.people || []).filter((p) => p.alive && p.id !== me.id && !p.__ghost);
   $('#vote').innerHTML = you.alive
-    ? cands.map((p) => `<div class="person"><span>${esc(p.name)}</span><button data-vote="${p.id}">Vote</button></div>`).join('')
+    ? cands.map((p) => `<div class="person"><span class="who">${crew(p.id, !p.alive)}${esc(p.name)}</span><button data-vote="${p.id}">Vote</button></div>`).join('')
     : '<p class="sub">The dead may listen but not vote.</p>';
   $('#vote').querySelectorAll('[data-vote]').forEach((b) => b.addEventListener('click', () => send({ t: 'vote', target: b.dataset.vote })));
 }
@@ -217,7 +277,7 @@ function renderOver() {
   const first = (S.events || []).slice().reverse().find((e) => e.type === 'over');
   $('#over-title').textContent = first ? first.text : 'Round over';
   $('#over-roles').innerHTML = (S.people || []).map((p) =>
-    `<div class="person"><span>${esc(p.name)}</span><span>${p.role || ''} ${p.alive ? '' : '(out)'}</span></div>`).join('');
+    `<div class="person"><span class="who">${crew(p.id, !p.alive)}${esc(p.name)}</span><span>${p.role || ''} ${p.alive ? '' : '(out)'}</span></div>`).join('');
   $('#btn-again').hidden = me.id !== S.hostId;
 }
 

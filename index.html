@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>House Impostor</title>
-<link rel="stylesheet" href="style.css?v=fast1">
+<link rel="stylesheet" href="style.css?v=ui1">
 </head>
 <body>
 
@@ -89,9 +89,18 @@
   </div>
 </div>
 
+<!-- role reveal: shown once when a round starts -->
+<div id="reveal" hidden>
+  <div class="crew big" id="reveal-crew"></div>
+  <div class="rl">You are</div>
+  <div class="rn" id="reveal-role"></div>
+  <div class="sub" id="reveal-hint"></div>
+  <div class="tap">tap to begin</div>
+</div>
+
 <div id="toast"></div>
 
-<script src="config.js?v=fast1"></script>
-<script src="app.js?v=fast1"></script>
+<script src="config.js?v=ui1"></script>
+<script src="app.js?v=ui1"></script>
 </body>
 </html>
