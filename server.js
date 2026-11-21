@@ -35,8 +35,9 @@ const RULES = {
   MEETING_S: 45,
   RSSI_FLOOR: -92,          // dBm: weaker than this proves nothing
   RSSI_MARGIN: 5,           // winner must beat 2nd-best beacon by this much
-  BEACON_STALE_S: 10,       // beacon report older than this is ignored
+  BEACON_STALE_S: 6,        // beacon report older than this is ignored
   ROOM_CLEAR_S: 25,         // hold a beacon-set room this long after evidence stops
+                            // (must exceed the client's 12 s scan watchdog + restart)
 };
 
 /* ------------------------------------------------------------------ *
@@ -284,18 +285,30 @@ function resolveRoom(playerId, stickTo) {
   if (!m) return null;
   const now = Date.now();
   const rows = [];
+  let held = null;   // the room we are already in, even if its sighting has aged out
   for (const [room, s] of m) {
-    if (now - s.ts > RULES.BEACON_STALE_S * 1000) continue;
     const rm = roomById(room);
     if (!rm || rm.lobby) continue;
+    const age = now - s.ts;
+    if (age > RULES.ROOM_CLEAR_S * 1000) continue;   // long gone: forget it
+    if (room === stickTo) held = { room, r: s.r + (rm.cal || 0), age };
+    if (age > RULES.BEACON_STALE_S * 1000) continue; // stale: cannot win, can still hold
     rows.push({ room, r: s.r + (rm.cal || 0) });
   }
   rows.sort((a, b) => b.r - a.r);
-  if (!rows.length) return null;
+  // Nothing fresh at all: hold the room we are in until the clear window expires.
+  if (!rows.length) return held ? held.room : null;
   if (rows[0].r < RULES.RSSI_FLOOR) return null;
-  if (stickTo) {
-    const cur = rows.find((x) => x.room === stickTo);
-    if (cur && rows[0].r - cur.r < RULES.RSSI_MARGIN) return stickTo;   // stay put
+  // Hysteresis works off `held`, not `rows`: when the current room's own sighting
+  // has just aged out it is no longer a candidate, but it must not lose by default.
+  if (held) {
+    const cur = rows.find((x) => x.room === held.room);
+    if (!cur) {
+      // Only a stale sighting of our room: stay until someone clears the floor.
+      if (rows[0].r - held.r < RULES.RSSI_MARGIN) return held.room;
+    } else if (rows[0].room !== held.room && rows[0].r - cur.r < RULES.RSSI_MARGIN) {
+      return held.room;   // stay put
+    }
   }
   if (rows.length > 1 && rows[0].r - rows[1].r < RULES.RSSI_MARGIN) return null;
   return rows[0].room;

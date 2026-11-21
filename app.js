@@ -447,14 +447,24 @@ async function pairBeacon() {
 // advertisements: bluetooth.watchAdvertisements (Bluefy / Chromium) or
 // navigator.bluetooth.requestLEScan. Both need a user gesture to start.
 let scanArmed = false, seen = {}, lescan = null, sampleTimer = null, scanDevs = [];
-let lastAdvertAt = 0, lastRestartAt = 0, restarting = false;
+let lastAdvertAt = 0, lastRestartAt = 0, restarting = false, newBeaconTimer = null;
 
 function onAdvert(e) {
   const d = e.device || {};
   const name = d.name || d.localName || e.name || '';   // global events may carry the name on the event
   if (!name.startsWith(CFG.BLE_PREFIX || 'HB-')) return;
-  seen[name.replace(CFG.BLE_PREFIX || 'HB-', '')] = e.rssi;
+  const room = name.replace(CFG.BLE_PREFIX || 'HB-', '');
+  const prev = seen[room];
+  // Keep the STRONGEST reading of the window: RSSI jitters several dB per packet,
+  // and the last one is as likely to be a bad sample as a good one.
+  if (prev === undefined || e.rssi > prev) seen[room] = e.rssi;
   lastAdvertAt = Date.now();
+  // A beacon we were not hearing a moment ago -> report NOW instead of waiting for
+  // the window to close. That is what makes walking into a room feel instant.
+  if (prev === undefined) {
+    clearTimeout(newBeaconTimer);
+    newBeaconTimer = setTimeout(reportScan, 400);
+  }
 }
 
 // beacio's requestLEScan goes silent after a few minutes (iOS throttling) and never
@@ -573,6 +583,7 @@ function disarmScan() {
 
 async function reportScan() {
   if (!scanArmed || !me) return;
+  clearTimeout(newBeaconTimer);
   // watchdog: scan went quiet -> restart it (see restartLescan)
   if (navigator.bluetooth.requestLEScan
       && Date.now() - lastAdvertAt > (CFG.SCAN_WATCHDOG_MS || 12000)
@@ -585,6 +596,9 @@ async function reportScan() {
   // status line) shows a live, silent scan instead of nothing at all.
   const payload = { p: me.id, seen: rooms.map((b) => ({ b, r: seen[b] })) };
   seen = {};   // next window starts clean, so a room we left drops out
+  // A report fired mid-window can leave a beacon that keeps advertising out of
+  // `seen` until its next packet; the heartbeat below re-reports it. The server
+  // keeps the last value for BEACON_STALE_S, so a gap costs nothing.
   try {
     await fetch('/api/scan', {
       method: 'POST', headers: { 'content-type': 'application/json', 'x-beacon-key': CFG.BEACON_KEY || 'house' },
