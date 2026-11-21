@@ -11,8 +11,8 @@
 html,body{margin:0;min-height:100%;color:var(--ink);font:16px/1.45 ui-rounded,system-ui,-apple-system,sans-serif}
 body::before{
   content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
-  background:url("img-poster.jpg") center top/cover no-repeat;
-  opacity:.22;filter:blur(2px) saturate(1.2);
+  background:url("img-art.jpg") center top/cover no-repeat;
+  opacity:.14;filter:blur(1px) saturate(1.1);
 }
 body{
   background:
@@ -148,7 +148,12 @@ header b{font-family:ui-monospace,monospace;letter-spacing:.2em;color:var(--gold
 @media (prefers-reduced-motion:reduce){.lobby-crew .crew{animation:none}}
 
 /* -------------------------------------------------------------- floorplan */
-#floorplan{display:flex;flex-direction:column-reverse;gap:.5rem;margin:.7rem 0}
+#floorplan{
+  display:flex;flex-direction:column-reverse;gap:.5rem;margin:.7rem 0;
+  padding:.6rem;border-radius:18px;
+  background:linear-gradient(180deg, rgba(7,18,46,.55), rgba(7,18,46,.8)), url("img-deck.jpg") center/cover no-repeat;
+  box-shadow:inset 0 0 0 2px rgba(44,74,134,.55), inset 0 0 40px rgba(0,0,0,.55);
+}
 .floor{border:2px solid var(--line);border-radius:16px;padding:.5rem;background:rgba(10,26,60,.75)}
 .floor>b{display:block;color:var(--dim);font-size:.7rem;text-transform:uppercase;letter-spacing:.12em;margin-bottom:.4rem}
 .floors-row{display:flex;flex-wrap:wrap;gap:.4rem}
