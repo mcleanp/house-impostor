@@ -221,8 +221,10 @@ kills.</li>
 </ul>
 <h2 id="play">Play</h2>
 <ul>
-<li>Host opens the site → “New house” → everyone else joins with the
-4-letter code. Pick a level → Start. Roles dealt server-side.</li>
+<li>Everyone opens the site, types a name, picks a colour and taps
+<strong>Join game</strong> — no code to type. The first person in is the
+host: pick a level → Start. Roles dealt server-side. “Start a separate
+game” opens a second room for a second household.</li>
 <li>Crew: do 4 chores (press-and-hold 5 s <strong>while the server
 believes you are in that room</strong>). Impostor: kills need the same
 room, 45 s cooldown; fakes tasks.</li>
@@ -238,8 +240,10 @@ takes its doors and chores with it; the server rejects duplicate
 ids/doors, self-doors and anything pointing at a room that no longer
 exists. Save writes <code>house.json</code> and everyone’s floorplan
 updates live.</li>
-<li><strong>Multiple games at once</strong>: every “New house” is its
-own game room (4-letter code); they all share the one house map.
+<li><strong>Multiple games at once</strong>: “Start a separate game”
+makes another room (4-letter code, shown in the game header); they all
+share the one house map. Joining always lands in the live game unless
+you start one.
 <code>/admin.html</code> (asks for the admin key, default
 <code>house</code>, same as the beacon key) lists every live game —
 code, state, players, host — with join/watch links, refreshing every 5

@@ -44,19 +44,40 @@ function drawSwatches() {
   }));
 }
 
-function connect() {
+// The house is one game at a time: the server hands out the live room, so a
+// player only types a name and picks a colour. `fresh` starts a separate game
+// instead of joining the one already running.
+async function joinGame(fresh) {
   const name = ($('#in-name').value || '').trim() || 'player';
-  const code = ($('#in-code').value || '').trim().toUpperCase();
+  const director = $('#in-director').checked ? '1' : '0';
+  const btn = $('#btn-join');
+  btn.disabled = true;
+  try {
+    let code = '';
+    if (!fresh) {
+      const r = await fetch('/api/current', { cache: 'no-store' });
+      code = ((await r.json()).code || '').toUpperCase();
+    }
+    if (!code) code = newCode();
+    $('#in-code').value = code;
+    localStorage.setItem('hi-name', name);
+    localStorage.setItem('hi-director', director);
+    connect(code);
+  } catch (e) {
+    toast(`Could not reach the house: ${e.message}`, 'bad');
+  } finally { btn.disabled = false; }
+}
+
+function connect(code) {
+  code = (code || $('#in-code').value || '').trim().toUpperCase();
+  if (!code) return;
+  const name = ($('#in-name').value || '').trim() || 'player';
   const director = $('#in-director').checked ? '1' : '0';
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   // Keep our player id so a refresh re-joins as the SAME player (server reuses it).
   const pid = localStorage.getItem('hi-pid') || '';
   // Remember the room, so a refresh lands straight back in it instead of the join form.
-  try {
-    localStorage.setItem('hi-room', code);
-    localStorage.setItem('hi-director', director);
-    localStorage.setItem('hi-name', name);
-  } catch {}
+  try { localStorage.setItem('hi-room', code); } catch {}
   ws = new WebSocket(`${proto}//${location.host}/ws?room=${code}&name=${encodeURIComponent(name)}&director=${director}&color=${encodeURIComponent(myColor)}&pid=${encodeURIComponent(pid)}`);
   ws.onmessage = (e) => {
     let m; try { m = JSON.parse(e.data); } catch { return; }
@@ -64,7 +85,7 @@ function connect() {
   };
   ws.onclose = () => {
     toast('Disconnected - retrying...', 'bad');
-    setTimeout(connect, reconnectDelay);
+    setTimeout(() => connect(code), reconnectDelay);
     reconnectDelay = Math.min(reconnectDelay * 1.6, 15000);
   };
   ws.onopen = () => { reconnectDelay = 800; };
@@ -771,7 +792,7 @@ window.addEventListener('DOMContentLoaded', () => {
     $('#in-director').checked = localStorage.getItem('hi-director') === '1';
     $('#scr-join').hidden = true;
     $('#scr-game').hidden = false;
-    connect();
+    connect(savedRoom);
   }
 
   fetch('/api/rules').then((r) => r.json()).then((r) => { window.RULES = r; }).catch(() => {});
@@ -795,18 +816,10 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  $('#btn-join').addEventListener('click', () => {
-    if (!$('#in-code').value.trim()) { toast('Type the room code, or press "New house".', 'bad'); return; }
-    armScan();   // inside the click gesture: room auto-detect arms itself, no extra tap
-    localStorage.setItem('hi-name', $('#in-name').value);
-    connect();
-  });
-  $('#btn-new').addEventListener('click', () => {
-    armScan();
-    $('#in-code').value = newCode();
-    localStorage.setItem('hi-name', $('#in-name').value);
-    connect();
-  });
+  // armScan must run inside the click gesture: the room auto-detect arms itself,
+  // no extra tap, and it survives the await in joinGame.
+  $('#btn-join').addEventListener('click', () => { armScan(); joinGame(false); });
+  $('#btn-new').addEventListener('click', () => { armScan(); joinGame(true); });
   $('#btn-menu').addEventListener('click', () => {
     const open = $('#menu').hidden;
     $('#menu').hidden = !open;

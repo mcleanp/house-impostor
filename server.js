@@ -374,6 +374,7 @@ function reresolveLive() {
  * Game state
  * ------------------------------------------------------------------ */
 const rooms = new Map();
+let lastAutoRoom = null, lastAutoRoomAt = 0;   // see /api/current
 
 function newCode() {
   const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -777,6 +778,28 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
+  if (pathname === '/api/current' && req.method === 'GET') {
+    // The house is one game at a time, so a player should never type a code.
+    // Hand out the live game; if there is none, start one (the first person in
+    // becomes host) and hand that out. Cached briefly so a burst of phones
+    // joining together cannot race into several rooms.
+    const fresh = [...rooms.values()]
+      .filter((r) => r.state !== 'over' && [...r.players.values()].some((p) => p.joined && !p.director))
+      .sort((a, b) => (a.state === 'lobby' ? 0 : 1) - (b.state === 'lobby' ? 0 : 1))[0];
+    let code = fresh && fresh.code;
+    if (!code) {
+      if (Date.now() - lastAutoRoomAt < 5000 && lastAutoRoom && rooms.has(lastAutoRoom)) code = lastAutoRoom;
+      else {
+        const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        do { code = Array.from({ length: 4 }, () => A[crypto.randomInt(A.length)]).join(''); } while (rooms.has(code));
+        makeRoom(code);
+        lastAutoRoom = code; lastAutoRoomAt = Date.now();
+      }
+    }
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    return res.end(JSON.stringify({ code }));
+  }
+
   if (pathname === '/api/rooms' && req.method === 'GET') {
     // admin page: every game in progress. Keyed so random passers-by cannot
     // harvest live 4-letter codes and crash the family night.

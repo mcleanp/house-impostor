@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>House Impostor</title>
-<link rel="stylesheet" href="style.css?v=ui5">
+<link rel="stylesheet" href="style.css?v=ui6">
 </head>
 <body>
 
 <!-- join -->
 <section id="scr-join" class="screen">
-  <div class="hero"><img src="img-hero.jpg?v=ui5" alt="Crewmates" width="960" height="540"></div>
+  <div class="hero"><img src="img-hero.jpg?v=ui6" alt="Crewmates" width="960" height="540"></div>
   <div id="floaters" aria-hidden="true"></div>
   <div class="card">
     <h1>House<br><span>Impostor</span></h1>
@@ -18,9 +18,10 @@
     <label>Name <input id="in-name" maxlength="18" autocomplete="off"></label>
     <label>Your colour</label>
     <div id="swatches" class="swatches" role="radiogroup" aria-label="Crewmate colour"></div>
-    <label>Room code <input id="in-code" maxlength="4" autocapitalize="characters" autocomplete="off" placeholder="KEYS"></label>
-    <button id="btn-join" class="big">Join lobby</button>
-    <button id="btn-new" class="ghost">New house (make a room)</button>
+    <input id="in-code" type="hidden" maxlength="4" autocomplete="off">
+    <button id="btn-join" class="big">Join game</button>
+    <p class="sub">One game at a time — you land in the house that is running.</p>
+    <button id="btn-new" class="ghost">Start a separate game</button>
     <label class="row"><input type="checkbox" id="in-director"> Director (spectate all, not play)</label>
     <p class="sub"><a href="/guide.html" style="color:var(--blue)">How to play &amp; setup guide</a> · <a href="/admin.html" style="color:var(--blue)">Admin — all game rooms</a></p>
     <p id="ble-warn" class="warn" hidden></p>
@@ -110,7 +111,7 @@
 
 <div id="toast"></div>
 
-<script src="config.js?v=ui5"></script>
-<script src="app.js?v=ui5"></script>
+<script src="config.js?v=ui6"></script>
+<script src="app.js?v=ui6"></script>
 </body>
 </html>
