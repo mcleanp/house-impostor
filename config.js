@@ -6,4 +6,5 @@ window.CFG = {
   SCAN_MS: 2500,       // how long one scan window runs (ms)
   SCAN_EVERY_MS: 2500, // heartbeat report while the screen is awake (new beacons report at once)
   SCAN_WATCHDOG_MS: 12000, // silence this long -> the scan has died, restart it
+  TAP_MIN_MS: 1200,    // a tap forces a location report at most this often (ms)
 };

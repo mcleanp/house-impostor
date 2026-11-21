@@ -508,6 +508,7 @@ async function pairBeacon() {
 // navigator.bluetooth.requestLEScan. Both need a user gesture to start.
 let scanArmed = false, seen = {}, lescan = null, sampleTimer = null, scanDevs = [];
 let lastAdvertAt = 0, lastRestartAt = 0, restarting = false, newBeaconTimer = null;
+let lastReportAt = 0, tapTimer = null;
 
 function onAdvert(e) {
   const d = e.device || {};
@@ -652,6 +653,7 @@ async function reportScan() {
   }
   const rooms = Object.keys(seen);
   const st = $('#ble-status');
+  lastReportAt = Date.now();
   // Always post, even when we heard nothing - that way the server (and the
   // status line) shows a live, silent scan instead of nothing at all.
   const payload = { p: me.id, seen: rooms.map((b) => ({ b, r: seen[b] })) };
@@ -670,7 +672,31 @@ async function reportScan() {
   } catch (e) { st.textContent = `report failed: ${e.message}`; }
 }
 
+// Tapping anywhere re-reports the last thing we heard, so a touch gives an
+// immediate location update instead of waiting for the heartbeat. The RSSI is
+// the strongest of the last window, which is what the server resolves on.
+// Rate-limited so a burst of taps does not become a burst of POSTs.
+function reportNow() {
+  if (!scanArmed || !me) return;
+  const wait = (CFG.TAP_MIN_MS || 1200) - (Date.now() - lastReportAt);
+  if (wait > 0) {
+    if (!tapTimer) tapTimer = setTimeout(() => { tapTimer = null; reportNow(); }, wait);
+    return;
+  }
+  clearTimeout(tapTimer); tapTimer = null;
+  reportScan();
+}
+
 function toggleScan() { if (scanArmed) disarmScan(); else armScan(); }
+
+// Any touch anywhere on the page = "where am I, right now". Passive so it never
+// delays the tap's own action; ignore taps on the join screen (no player yet)
+// and on the role-reveal overlay (it has its own tap handler).
+document.addEventListener('pointerdown', () => {
+  if (!me || $('#scr-game').hidden) return;
+  if (!$('#reveal').hidden) return;
+  reportNow();
+}, { passive: true });
 
 /* ------------------------------------------------------------------ wire */
 window.addEventListener('DOMContentLoaded', () => {
