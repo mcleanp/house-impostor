@@ -171,17 +171,20 @@ header b{font-family:ui-monospace,monospace;letter-spacing:.2em;color:var(--gold
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);
 }
 .room .nm{position:relative;z-index:1;text-shadow:0 1px 0 rgba(0,0,0,.6)}
-/* one colour per room id - the same room always looks the same */
-.room[data-r="bed1"]{background:linear-gradient(180deg,#7a2f4a,#4a1a2c)}
-.room[data-r="bed2"]{background:linear-gradient(180deg,#6b2f6e,#3d1a40)}
-.room[data-r="bath"]{background:linear-gradient(180deg,#1d6f8c,#0d3d50)}
-.room[data-r="land2"],.room[data-r="land1"],.room[data-r="land0"]{background:linear-gradient(180deg,#3d4a63,#232b3b)}
-.room[data-r="down"]{background:linear-gradient(180deg,#8a5a1e,#4d3110)}
-.room[data-r="base1"]{background:linear-gradient(180deg,#5a2a2a,#331616)}
-.room[data-r="base2"]{background:linear-gradient(180deg,#4a3a12,#2a2109)}
-.room[data-r="room"]{background:linear-gradient(180deg,#1f6b4a,#0f3a28)}
-.room[data-r="room2"]{background:linear-gradient(180deg,#7a6a1e,#453b0d)}
-.room[data-r="lobby"]{background:linear-gradient(180deg,#2a3550,#161d2c)}
+/* one colour per room id, over a real room photo - the same room always looks the same */
+.room{background-size:cover;background-position:center;background-blend-mode:multiply}
+.room[data-r="bed1"]{background-image:linear-gradient(180deg,rgba(122,47,74,.72),rgba(74,26,44,.86)),url("img-room-bed1.jpg")}
+.room[data-r="bed2"]{background-image:linear-gradient(180deg,rgba(107,47,110,.72),rgba(61,26,64,.86)),url("img-room-bed2.jpg")}
+.room[data-r="bath"]{background-image:linear-gradient(180deg,rgba(29,111,140,.72),rgba(13,61,80,.86)),url("img-room-bath.jpg")}
+.room[data-r="land2"]{background-image:linear-gradient(180deg,rgba(61,74,99,.72),rgba(35,43,59,.86)),url("img-room-land2.jpg")}
+.room[data-r="land1"]{background-image:linear-gradient(180deg,rgba(61,74,99,.72),rgba(35,43,59,.86)),url("img-room-land1.jpg")}
+.room[data-r="land0"]{background-image:linear-gradient(180deg,rgba(61,74,99,.72),rgba(35,43,59,.86)),url("img-room-land0.jpg")}
+.room[data-r="down"]{background-image:linear-gradient(180deg,rgba(138,90,30,.72),rgba(77,49,16,.86)),url("img-room-down.jpg")}
+.room[data-r="base1"]{background-image:linear-gradient(180deg,rgba(90,42,42,.72),rgba(51,22,22,.86)),url("img-room-base1.jpg")}
+.room[data-r="base2"]{background-image:linear-gradient(180deg,rgba(74,58,18,.72),rgba(42,33,9,.86)),url("img-room-base2.jpg")}
+.room[data-r="room"]{background-image:linear-gradient(180deg,rgba(31,107,74,.72),rgba(15,58,40,.86)),url("img-room-room.jpg")}
+.room[data-r="room2"]{background-image:linear-gradient(180deg,rgba(122,106,30,.72),rgba(69,59,13,.86)),url("img-room-room2.jpg")}
+.room[data-r="lobby"]{background-image:linear-gradient(180deg,rgba(42,53,80,.72),rgba(22,29,44,.86)),url("img-room-lobby.jpg")}
 .room.here{border-color:var(--gold);box-shadow:inset 0 0 0 2px var(--gold), 0 0 18px rgba(255,210,63,.45)}
 .room.here::after{background:var(--gold);height:4px;opacity:.9}
 .room.locked{opacity:.34;filter:saturate(.5)}
