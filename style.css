@@ -153,13 +153,35 @@ header b{font-family:ui-monospace,monospace;letter-spacing:.2em;color:var(--gold
 .floor>b{display:block;color:var(--dim);font-size:.7rem;text-transform:uppercase;letter-spacing:.12em;margin-bottom:.4rem}
 .floors-row{display:flex;flex-wrap:wrap;gap:.4rem}
 .room{
-  flex:1 1 30%;min-width:100px;min-height:58px;border-radius:12px;border:2px solid var(--line);
-  background:#0a1a3c;padding:.4rem;font-size:.76rem;font-weight:700;position:relative;
-  box-shadow:inset 0 -3px 0 rgba(0,0,0,.35);
+  flex:1 1 30%;min-width:100px;min-height:64px;border-radius:12px;border:2px solid var(--line);
+  padding:.4rem .4rem .5rem;font-size:.76rem;font-weight:700;position:relative;overflow:hidden;
+  background:linear-gradient(180deg,#123a5c,#0a2440);box-shadow:inset 0 -4px 0 rgba(0,0,0,.4);
 }
-.room.here{border-color:var(--gold);background:#3a2f0a;box-shadow:0 0 0 2px var(--gold) inset, 0 0 18px rgba(255,210,63,.35)}
-.room.locked{opacity:.32}
-.room .dots{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;align-items:flex-end}
+.room::before{ /* floor plating, like the ship deck */
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background:repeating-linear-gradient(90deg, rgba(255,255,255,.07) 0 1px, transparent 1px 14px);
+}
+.room::after{ /* lit ceiling strip */
+  content:"";position:absolute;left:0;right:0;top:0;height:3px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);
+}
+.room .nm{position:relative;z-index:1;text-shadow:0 1px 0 rgba(0,0,0,.6)}
+/* one colour per room id - the same room always looks the same */
+.room[data-r="bed1"]{background:linear-gradient(180deg,#7a2f4a,#4a1a2c)}
+.room[data-r="bed2"]{background:linear-gradient(180deg,#6b2f6e,#3d1a40)}
+.room[data-r="bath"]{background:linear-gradient(180deg,#1d6f8c,#0d3d50)}
+.room[data-r="land2"],.room[data-r="land1"],.room[data-r="land0"]{background:linear-gradient(180deg,#3d4a63,#232b3b)}
+.room[data-r="down"]{background:linear-gradient(180deg,#8a5a1e,#4d3110)}
+.room[data-r="base1"]{background:linear-gradient(180deg,#5a2a2a,#331616)}
+.room[data-r="base2"]{background:linear-gradient(180deg,#4a3a12,#2a2109)}
+.room[data-r="room"]{background:linear-gradient(180deg,#1f6b4a,#0f3a28)}
+.room[data-r="room2"]{background:linear-gradient(180deg,#7a6a1e,#453b0d)}
+.room[data-r="lobby"]{background:linear-gradient(180deg,#2a3550,#161d2c)}
+.room.here{border-color:var(--gold);box-shadow:inset 0 0 0 2px var(--gold), 0 0 18px rgba(255,210,63,.45)}
+.room.here::after{background:var(--gold);height:4px;opacity:.9}
+.room.locked{opacity:.34;filter:saturate(.5)}
+.room .dots{position:relative;z-index:1;display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;align-items:flex-end}
+.room .body{position:absolute;top:2px;right:4px;font-size:1rem;z-index:1}
 .room .body{position:absolute;top:2px;right:4px;font-size:1rem}
 
 /* ------------------------------------------------------------------ people */

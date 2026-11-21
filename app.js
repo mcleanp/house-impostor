@@ -261,8 +261,8 @@ function renderFloorplan() {
       const dots = people.map((p) =>
         `<span title="${esc(p.name)}${p.alive ? '' : ' (out)'}" style="${p.id === me.id ? 'filter:drop-shadow(0 0 4px #ffd23f)' : ''}">${crew(p.id, !p.alive)}</span>`).join('');
       const locked = you.moveTo && !you.moveTo.includes(r.id) && r.id !== here && !r.lobby && S.state === 'playing';
-      return `<div class="room ${r.id === here ? 'here' : ''} ${locked ? 'locked' : ''}">
-        ${esc(r.name)}${bodies.length ? '<span class="body">💀</span>' : ''}
+      return `<div class="room ${r.id === here ? 'here' : ''} ${locked ? 'locked' : ''}" data-r="${esc(r.id)}">
+        <span class="nm">${esc(r.name)}</span>${bodies.length ? '<span class="body">💀</span>' : ''}
         <div class="dots">${dots}</div></div>`;
     }).join('');
     div.innerHTML = `<b>${esc(f.name)}</b><div class="floors-row">${row}</div>`;
