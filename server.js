@@ -38,6 +38,7 @@ const RULES = {
   GATHER_S: 45,             // emergency: seconds to walk to the gather room first
   GATHER_ROOM: 'room',      // default gather room (the dining room)
   DELAY_KILL_S: 5,          // a delayed kill lands this long after the button
+  VOTE_S: 30,               // how long the ballot is open after the discussion
   RSSI_FLOOR: -92,          // dBm: weaker than this proves nothing
   RSSI_MARGIN: 5,           // winner must beat 2nd-best beacon by this much
   BEACON_STALE_S: 6,        // beacon report older than this is ignored
@@ -223,6 +224,7 @@ function normaliseHouse(h) {
   const gr = Math.round(Number((h.settings || {}).gatherS));
   const gid = String((h.settings || {}).gatherRoom || '');
   const dk = Math.round(Number((h.settings || {}).delayKillS));
+  const vs = Math.round(Number((h.settings || {}).voteS));
   const roomIds = new Set(h.rooms.map((r) => r.id));
   h.settings = {
     meetingS: Number.isFinite(ms) ? Math.min(300, Math.max(15, ms)) : RULES.MEETING_S,
@@ -234,6 +236,8 @@ function normaliseHouse(h) {
     // A delayed kill lets the impostor press Kill and be gone before the body
     // appears. 0 turns the feature off (kills stay instant).
     delayKillS: Number.isFinite(dk) ? Math.min(60, Math.max(0, dk)) : RULES.DELAY_KILL_S,
+    // Discussion opens the meeting; the ballot only opens for voteS after it.
+    voteS: Number.isFinite(vs) ? Math.min(180, Math.max(10, vs)) : RULES.VOTE_S,
   };
   // The lobby is the "out" area: dead players walk there. Not part of the
   // movement graph, never a task room, always present.
@@ -435,7 +439,7 @@ function makeRoom(code) {
     code, players: new Map(), order: [], hostId: null,
     state: 'lobby',            // lobby | playing | meeting | over
     levelId: 'house',
-    startedAt: 0, killReadyAt: 0, meetingEnds: 0, gatherEnds: 0, gatherRoom: '', pendingKills: [],
+    startedAt: 0, killReadyAt: 0, meetingEnds: 0, voteEnds: 0, voteOpenSent: false, gatherEnds: 0, gatherRoom: '', pendingKills: [],
     votes: new Map(), emergencyUsed: new Map(), bodies: [],   // bodies: [{room, victimId}]; emergencyUsed: id -> count
     events: [], overSent: false,
   };
@@ -578,14 +582,15 @@ function movePlayer(room, p, to) {
   return null;
 }
 
-function killPlayer(room, killer, victimId) {
+function killPlayer(room, killer, victimId, kind) {
   if (room.state !== 'playing') return null;
   if (killer.role !== 'impostor' || !killer.alive) return null;
   const v = room.players.get(victimId);
   if (!v || !v.joined || !v.alive || v.director || v.role === 'impostor') return null;
   if (v.room !== killer.room) return 'They are not in your room.';
   if (Date.now() < room.killReadyAt) return 'Kill cooldown not ready.';
-  const delay = delayKillSeconds();
+  // 'delay' queues the kill; anything else lands now.
+  const delay = kind === 'delay' ? delayKillSeconds() : 0;
   room.killReadyAt = Date.now() + RULES.KILL_COOLDOWN_S * 1000;
   if (delay > 0) {
     // The victim keeps walking for `delay` more seconds - that is the whole
@@ -629,6 +634,11 @@ function delayKillSeconds() {
   return Number.isFinite(n) && n >= 0 && n <= 60 ? n : RULES.DELAY_KILL_S;
 }
 
+function voteSeconds() {
+  const n = Math.round(Number((HOUSE.settings || {}).voteS));
+  return Number.isFinite(n) && n >= 10 && n <= 180 ? n : RULES.VOTE_S;
+}
+
 function meetingSeconds() {
   const n = Math.round(Number((HOUSE.settings || {}).meetingS));
   return Number.isFinite(n) && n >= 15 && n <= 300 ? n : RULES.MEETING_S;
@@ -641,8 +651,11 @@ function startMeeting(room, reason, opts) {
   room.state = 'meeting';
   room.gatherEnds = gather ? Date.now() + gatherSeconds() * 1000 : 0;
   room.gatherRoom = gather ? gatherRoom() : '';
-  room.meetingEnds = Date.now() + (gather ? gatherSeconds() * 1000 + meetingSeconds() * 1000 : meetingSeconds() * 1000);
+  const base = Date.now() + (gather ? gatherSeconds() * 1000 : 0);
+  room.meetingEnds = base + meetingSeconds() * 1000;          // discussion ends here
+  room.voteEnds = room.meetingEnds + voteSeconds() * 1000;    // ballot closes here
   room.votes.clear();
+  room.voteOpenSent = false;
   room.killReadyAt = Date.now() + RULES.POST_MEETING_COOLDOWN_S * 1000;
   roomEvent(room, { type: 'meeting', text: reason });
   return true;
@@ -682,7 +695,7 @@ function endMeeting(room) {
     roomEvent(room, { type: 'eject', text: 'No consensus - nobody was ejected.' });
   }
   room.state = 'playing';
-  room.meetingEnds = 0; room.gatherEnds = 0; room.gatherRoom = '';
+  room.meetingEnds = 0; room.voteEnds = 0; room.gatherEnds = 0; room.gatherRoom = '';
   room.pendingKills = [];
   checkWin(room);
 }
@@ -729,6 +742,9 @@ function snapshotFor(room, p) {
     state: room.state,
     now: Date.now(),
     killReadyAt: room.killReadyAt, meetingEnds: room.meetingEnds, meetingS: meetingSeconds(),
+    voteEnds: room.voteEnds || 0, voteS: voteSeconds(),
+    voteOpen: room.state === 'meeting' && !!room.voteEnds && Date.now() >= room.meetingEnds
+      && !(room.gatherEnds && Date.now() < room.gatherEnds),
     gatherEnds: room.gatherEnds || 0, gatherRoom: room.gatherRoom || '',
     gatherS: gatherSeconds(), gatherRoomName: roomById(gatherRoom()).name,
     delayKillS: delayKillSeconds(),
@@ -738,7 +754,8 @@ function snapshotFor(room, p) {
     // is only sent once a vote is in, so the count cannot hint at who is who
     // before anyone has voted.
     // The ballot only appears once everyone has had time to walk to the room.
-    votes: room.state === 'meeting' && !(room.gatherEnds && Date.now() < room.gatherEnds) ? {
+    votes: room.state === 'meeting' && !!room.voteEnds && Date.now() >= room.meetingEnds
+      && !(room.gatherEnds && Date.now() < room.gatherEnds) ? {
       cast: room.votes.size, of: alivePlayers(room).length, mine: room.votes.get(p.id) || null,
       tally: room.votes.size ? [...room.votes.values()].reduce((m, t) => (m[t] = (m[t] || 0) + 1, m), {}) : null,
     } : null,
@@ -814,7 +831,7 @@ function handleMsg(room, p, msg) {
       break;
     }
     case 'kill': {
-      const err = killPlayer(room, p, String(msg.victim || '').slice(0, 24));
+      const err = killPlayer(room, p, String(msg.victim || '').slice(0, 24), msg.kind === 'delay' ? 'delay' : 'kill');
       if (err) p.conn.send({ t: 'nope', text: err });
       else { broadcastState(room); checkWin(room); }
       break;
@@ -830,6 +847,7 @@ function handleMsg(room, p, msg) {
     }
     case 'vote': {
       if (room.state !== 'meeting' || !p.alive) return;
+      if (Date.now() < room.meetingEnds) { p.conn.send({ t: 'nope', text: 'Not yet - the discussion is still running.' }); return; }
       const target = String(msg.target || '').slice(0, 24);
       if (target !== 'skip' && !room.players.has(target)) return;
       room.votes.set(p.id, target);
@@ -1154,7 +1172,14 @@ setInterval(() => {
   }
   for (const room of rooms.values()) {
     let dirty = false;
-    if (room.state === 'meeting' && room.meetingEnds && now >= room.meetingEnds) { endMeeting(room); dirty = true; }
+    if (room.state === 'meeting' && room.voteEnds && now >= room.voteEnds) { endMeeting(room); dirty = true; }
+    // The phase flip itself must be pushed: with no votes coming in nothing else
+    // marks the room dirty, so the client would sit on a frozen voteOpen:false
+    // (and a stale countdown) for the whole ballot.
+    if (room.state === 'meeting' && room.voteEnds && !room.voteOpenSent
+        && now >= room.meetingEnds && !(room.gatherEnds && now < room.gatherEnds)) {
+      room.voteOpenSent = true; dirty = true;
+    }
     // Delayed kills land here. The body is placed in the room the kill was set
     // in, not where the victim has since wandered - the two are the same thing
     // while the delay is short, and this keeps the feed honest.

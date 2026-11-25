@@ -263,16 +263,6 @@ function render() {
   else if (you.role) { roleEl.textContent = you.role.toUpperCase(); roleEl.classList.add(you.role); }
   else roleEl.textContent = '';
 
-  // Lobby dressing: a row of crewmates waiting in the airlock, in everyone's colours.
-  const lob = $('#lobby-crew');
-  if (lob) {
-    if (S.state === 'lobby') {
-      const ids = [me.id, ...(S.people || []).map((p) => p.id)];
-      lob.innerHTML = ids.slice(0, 12).map((id) => crew(id, false)).join('');
-      lob.hidden = false;
-    } else lob.hidden = true;
-  }
-
   renderFloorplan();
   renderPeople();
   renderTasks();
@@ -424,15 +414,20 @@ function renderKill() {
   const wait = Math.ceil(((S.killReadyAt || 0) - Date.now()) / 1000);
   const others = (S.people || []).filter((p) => p.alive && p.id !== me.id);
   if (!others.length) { box.innerHTML = '<p class="sub">Nobody else is alive.</p>'; return; }
+  const d = S.delayKillS || 0;
   box.innerHTML = others.map((p) => {
     const inRoom = p.room === you.room;
-    const d = S.delayKillS || 0;
-    const label = wait > 0 ? `Kill ${wait}s` : inRoom ? (d > 0 ? `Kill (+${d}s)` : 'Kill') : 'Go there';
+    const can = inRoom && wait <= 0;
+    const btns = can
+      ? `<button class="danger" data-kill2="${p.id}">Kill</button>`
+        + (d > 0 ? `<button class="ghost" data-delay="${p.id}">Delay ${d}s</button>` : '')
+      : `<button class="danger" disabled>${inRoom ? `Kill ${wait}s` : 'Go there'}</button>`;
     return `<div class="person"><span class="who">${crew(p.id, true)}${esc(p.name)}
       <span class="sub">${p.room ? esc(roomName(p.room)) : 'not placed'}${inRoom ? ' - with you' : ''}</span></span>
-      <button class="danger" data-kill2="${p.id}" ${inRoom && wait <= 0 ? '' : 'disabled'}>${label}</button></div>`;
+      <span class="kbtns">${btns}</span></div>`;
   }).join('');
-  box.querySelectorAll('[data-kill2]').forEach((b) => b.addEventListener('click', () => send({ t: 'kill', victim: b.dataset.kill2 })));
+  box.querySelectorAll('[data-kill2]').forEach((b) => b.addEventListener('click', () => send({ t: 'kill', victim: b.dataset.kill2, kind: 'kill' })));
+  box.querySelectorAll('[data-delay]').forEach((b) => b.addEventListener('click', () => send({ t: 'kill', victim: b.dataset.delay, kind: 'delay' })));
 }
 
 function renderTasks() {
@@ -694,10 +689,31 @@ function renderMeeting() {
     voteBuilt = false;
     return;
   }
-  const secs = Math.max(0, Math.ceil((S.meetingEnds - Date.now()) / 1000));
+  // Discussion first, then the ballot. Voting is refused until voteOpen, so the
+  // buttons are disabled rather than silently doing nothing.
+  // The server flag is authoritative, but a countdown that has already run out
+  // must open the ballot even if that one snapshot has not arrived yet.
+  const voteOpen = S.voteOpen || (S.voteEnds && Date.now() >= (S.meetingEnds || 0));
+  if (!voteOpen) {
+    const dsecs = Math.max(0, Math.ceil((S.meetingEnds - Date.now()) / 1000));
+    $('#m-title').textContent = 'DISCUSS';
+    $('#m-go').hidden = false;
+    $('#m-go').innerHTML = `Talk it out - voting opens in <b>${dsecs}s</b>`;
+    $('#m-timer').textContent = dsecs;
+    const db = $('#m-bar');
+    if (db) db.style.setProperty('--p', String(S.meetingS ? Math.min(1, dsecs / S.meetingS) : 1));
+    $('#vote').innerHTML = '<p class="sub">Look around, work out who it was. The ballot opens when the discussion ends.</p>';
+    $('#m-votes').textContent = '';
+    $('#m-mine').hidden = true;
+    voteBuilt = false;
+    return;
+  }
+  $('#m-title').textContent = 'VOTE';
+  $('#m-go').hidden = true;
+  const secs = Math.max(0, Math.ceil((S.voteEnds - Date.now()) / 1000));
   $('#m-timer').textContent = secs;
   const bar = $('#m-bar');
-  if (bar) bar.style.setProperty('--p', String(S.meetingS ? Math.min(1, secs / S.meetingS) : 1));
+  if (bar) bar.style.setProperty('--p', String(S.voteS ? Math.min(1, secs / S.voteS) : 1));
   const v = S.votes || {};
   $('#m-votes').textContent = `votes in: ${v.cast || 0} / ${v.of || 0}`;
   const cands = (S.people || []).filter((p) => p.alive && p.id !== me.id);
@@ -818,7 +834,8 @@ function buildHouseEditor() {
       '<h2>Rooms <span class="sub">first box = id (editable, lowercase; it is the beacon name), second = display name</span></h2><div id="he-rooms"></div><button id="he-addroom" class="ghost">+ room</button>' +
       '<h2>Doors</h2><div id="he-doors"></div>' +
       '<div class="he-task"><select id="he-da"></select><span class="sub">↔</span><select id="he-db"></select><button id="he-adddoor" class="ghost">+ door</button></div>' +
-      '<h2>Settings</h2><label>Meeting / voting time (seconds, 15-300)</label><input id="he-meeting" type="number" min="15" max="300" step="5">' +
+      '<h2>Settings</h2><label>Discussion time before the ballot (seconds, 15-300)</label><input id="he-meeting" type="number" min="15" max="300" step="5">' +
+      '<label>Voting time once the ballot opens (seconds, 10-180)</label><input id="he-vote" type="number" min="10" max="180" step="5">' +
       '<label>Emergency calls per crew member, per round (0-5)</label><input id="he-emergency" type="number" min="0" max="5" step="1">' +
       '<label>Emergency walk-in time (seconds, 5-120) - everyone meets before the vote</label><input id="he-gather" type="number" min="5" max="120" step="5">' +
       '<label>Emergency meeting room</label><select id="he-gatherroom"></select>' +
@@ -846,6 +863,13 @@ function buildHouseEditor() {
       const grr = $('#he-gatherroom');
       grr.innerHTML = playRooms().map((r) => `<option value="${esc(r.id)}"${r.id === (h.settings.gatherRoom || 'room') ? ' selected' : ''}>${esc(r.name)}</option>`).join('');
       grr.addEventListener('change', () => { h.settings.gatherRoom = grr.value; });
+      const vt = $('#he-vote');
+      vt.value = h.settings.voteS ?? 30;
+      vt.addEventListener('change', () => {
+        const n = Math.round(Number(vt.value));
+        h.settings.voteS = Number.isFinite(n) ? Math.min(180, Math.max(10, n)) : 30;
+        vt.value = h.settings.voteS;
+      });
       const dk = $('#he-delay');
       dk.value = h.settings.delayKillS ?? 5;
       dk.addEventListener('change', () => {
@@ -1082,7 +1106,7 @@ async function restartLescan() {
 
 // Bumped whenever the client changes. It travels on every diag line, so a log
 // can never again be ambiguous about which version a phone is running.
-const BUILD = 'ui29';
+const BUILD = 'ui30';
 
 // Fire-and-forget note to the server so we can read what the phone did.
 function diag(o) {
