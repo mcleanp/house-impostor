@@ -30,8 +30,13 @@ function newCode() {
 // Colour is cosmetic and only ever sent as a hex string the server re-validates.
 const COLORS = ['#ff4d5e', '#38bdf8', '#4ade80', '#ffd23f', '#c084fc', '#fb923c', '#f472b6', '#22d3ee', '#a3e635', '#94a3b8', '#e879f9', '#f8fafc'];
 let myColor = '#7dd3fc';
+// The colour belongs to the PLAYER, not the tab: it is stored per player id so
+// a refresh (which keeps the id) keeps the colour, and only Leave - which
+// drops the id - lets the join screen pick a new one.
+function colorKey(pid) { return 'hi-color:' + (pid || 'new'); }
 function loadColor() {
-  const c = (localStorage.getItem('hi-color') || '').toUpperCase();
+  const pid = localStorage.getItem('hi-pid') || '';
+  const c = (localStorage.getItem(colorKey(pid)) || localStorage.getItem('hi-color') || '').toUpperCase();
   myColor = COLORS.includes(c) ? c : COLORS[Math.floor(Math.random() * COLORS.length)];
 }
 function drawSwatches() {
@@ -39,7 +44,7 @@ function drawSwatches() {
   el.innerHTML = COLORS.map((c) => `<button type="button" role="radio" data-c="${c}" aria-checked="${c === myColor}" class="${c === myColor ? 'on' : ''}"><span class="crew" style="--c:${c}"></span></button>`).join('');
   el.querySelectorAll('[data-c]').forEach((b) => b.addEventListener('click', () => {
     myColor = b.dataset.c;
-    try { localStorage.setItem('hi-color', myColor); } catch {}
+    try { localStorage.setItem(colorKey(localStorage.getItem('hi-pid')), myColor); } catch {}
     drawSwatches();
     if (me) send({ t: 'color', color: myColor });   // live change, no rejoin
     if (S) render();
@@ -100,7 +105,11 @@ function connect(code) {
 // Leave on purpose: drop the stored id so we come back as a new player, and
 // forget the room so a reload shows the join screen.
 function leaveGame() {
-  try { localStorage.removeItem('hi-pid'); localStorage.removeItem('hi-room'); } catch {}
+  try {
+    const pid = localStorage.getItem('hi-pid');
+    localStorage.removeItem('hi-pid'); localStorage.removeItem('hi-room');
+    if (pid) localStorage.removeItem(colorKey(pid));
+  } catch {}
   // Stop the resume path from firing: without this the next load sees the old
   // room in storage and walks straight back into the game you just left.
   resumeRoom = '';
@@ -126,7 +135,12 @@ function onMsg(m) {
     case 'welcome':
       me = { id: m.id, name: m.name, hostId: m.hostId, director: !!m.director };
       if (m.color) myColor = m.color;
-      try { localStorage.setItem('hi-pid', m.id); } catch {}   // survive a refresh
+      try {
+        localStorage.setItem('hi-pid', m.id);   // survive a refresh
+        // Pin the colour to this player id, so a refresh cannot re-roll it.
+        localStorage.setItem(colorKey(m.id), myColor);
+        localStorage.removeItem('hi-color');   // one-off: drop the old tab-wide copy
+      } catch {}
       $('#scr-join').hidden = true;
       $('#scr-game').hidden = false;
       // A director only watches: no beacons, no BLE permission, no scanning.
