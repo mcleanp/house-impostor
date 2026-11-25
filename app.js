@@ -148,6 +148,11 @@ function onMsg(m) {
       if (ws) { ws.onclose = null; try { ws.close(); } catch {} ws = null; }
       break;
     case 'pong': break;
+    case 'voted': {
+      const who = (S.people || []).find((p) => p.id === m.target);
+      toast(`Vote saved: ${who ? who.name : 'skip'}`);
+      break;
+    }
     case 'died':
       toast(`You are dead. Walk to the lobby. (${m.room})`, 'bad', 8000);
       if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
@@ -278,6 +283,7 @@ function render() {
   }
 
   $('#scr-meeting').hidden = S.state !== 'meeting';
+  if (S.state !== 'meeting') voteBuilt = false;
   if (S.state === 'meeting') renderMeeting();
   const over = S.state === 'over';
   $('#scr-over').hidden = !over;
@@ -604,18 +610,37 @@ function buildGame(game, el, done) {
   b.addEventListener('pointerup', () => { if (iv) clearTimeout(iv); });
 }
 
+let voteBuilt = false;   // list is built once per meeting, not on every tick
 function renderMeeting() {
   const you = S.you || {};
   const secs = Math.max(0, Math.ceil((S.meetingEnds - Date.now()) / 1000));
   $('#m-timer').textContent = secs;
   const bar = $('#m-bar');
   if (bar) bar.style.setProperty('--p', String(S.meetingS ? Math.min(1, secs / S.meetingS) : 1));
-  $('#m-votes').textContent = `votes in: ${S.votes ? S.votes.cast : 0} / ${S.votes ? S.votes.of : 0}`;
-  const cands = (S.people || []).filter((p) => p.alive && p.id !== me.id && !p.__ghost);
-  $('#vote').innerHTML = you.alive
-    ? cands.map((p) => `<div class="person"><span class="who">${crew(p.id, !p.alive)}${esc(p.name)}</span><button data-vote="${p.id}">Vote</button></div>`).join('')
-    : '<p class="sub">The dead may listen but not vote.</p>';
-  $('#vote').querySelectorAll('[data-vote]').forEach((b) => b.addEventListener('click', () => send({ t: 'vote', target: b.dataset.vote })));
+  const v = S.votes || {};
+  $('#m-votes').textContent = `votes in: ${v.cast || 0} / ${v.of || 0}`;
+  const cands = (S.people || []).filter((p) => p.alive && p.id !== me.id);
+  const mine = v.mine || null;
+
+  // Rebuilding this list every 500 ms replaced the button under the finger
+  // mid-tap, which is why votes on the iPhones silently did nothing. Build the
+  // rows once, then only update the labels.
+  if (!voteBuilt) {
+    voteBuilt = true;
+    $('#vote').innerHTML = you.alive
+      ? cands.map((p) => `<div class="person"><span class="who">${crew(p.id, !p.alive)}${esc(p.name)}</span><button data-vote="${p.id}">Vote</button></div>`).join('')
+        + '<div class="person"><span class="who">Skip</span><button data-vote="skip" class="ghost">Skip</button></div>'
+      : '<p class="sub">The dead may listen but not vote.</p>';
+    $('#vote').querySelectorAll('[data-vote]').forEach((b) => b.addEventListener('click', () => send({ t: 'vote', target: b.dataset.vote })));
+  }
+  // Mark what you picked and how many votes each name has.
+  $('#vote').querySelectorAll('[data-vote]').forEach((b) => {
+    const id = b.dataset.vote;
+    const n = (v.tally || {})[id] || 0;
+    b.classList.toggle('mine', id === mine);
+    b.textContent = id === mine ? 'Your vote' : (n ? `Vote (${n})` : 'Vote');
+    b.disabled = !you.alive;
+  });
 }
 
 function renderOver() {

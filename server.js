@@ -646,7 +646,13 @@ function snapshotFor(room, p) {
     killReadyAt: room.killReadyAt, meetingEnds: room.meetingEnds, meetingS: meetingSeconds(),
     progress: inPlay ? Math.round(taskProgress(room) * 100) : 0,
     events: room.events.slice(-12),
-    votes: room.state === 'meeting' ? { cast: room.votes.size, of: alivePlayers(room).length } : null,
+    // `mine` lets the phone show which name it has already voted for. `tally`
+    // is only sent once a vote is in, so the count cannot hint at who is who
+    // before anyone has voted.
+    votes: room.state === 'meeting' ? {
+      cast: room.votes.size, of: alivePlayers(room).length, mine: room.votes.get(p.id) || null,
+      tally: room.votes.size ? [...room.votes.values()].reduce((m, t) => (m[t] = (m[t] || 0) + 1, m), {}) : null,
+    } : null,
     you: p.director ? { director: true } : {
       id: p.id, name: p.name, room: p.room, alive: p.alive,
       role: room.state === 'lobby' ? undefined : p.role,
@@ -743,6 +749,7 @@ function handleMsg(room, p, msg) {
       const target = String(msg.target || '').slice(0, 24);
       if (target !== 'skip' && !room.players.has(target)) return;
       room.votes.set(p.id, target);
+      p.conn.send({ t: 'voted', target });   // immediate ack, so a tap is never silent
       broadcastState(room);
       if (room.votes.size >= alivePlayers(room).length) { endMeeting(room); broadcastState(room); }
       break;

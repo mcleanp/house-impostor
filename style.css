@@ -302,3 +302,7 @@ details summary{cursor:pointer;color:var(--gold);font-weight:800;text-transform:
 #scr-over{z-index:25}
 #scr-over .card{max-height:calc(100vh - 2rem);overflow:auto}
 #btn-again{position:sticky;bottom:0}
+
+/* your own vote is unmistakable - the red is the same on every row otherwise */
+#vote .person button.mine{background:var(--gold);color:#2b2200;box-shadow:0 5px 0 #a8801a}
+#vote .person button.ghost{background:transparent;color:var(--ink);box-shadow:none;border:2px solid var(--line)}
