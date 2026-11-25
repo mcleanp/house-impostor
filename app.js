@@ -675,6 +675,22 @@ function buildGame(game, el, done) {
 let voteBuilt = false;   // list is built once per meeting, not on every tick
 function renderMeeting() {
   const you = S.you || {};
+  // An emergency opens a gather phase: walk to the room, the ballot is not
+  // live yet. Same overlay, different heading.
+  const gathering = !!S.gatherEnds && Date.now() < S.gatherEnds;
+  const gsecs = gathering ? Math.max(0, Math.ceil((S.gatherEnds - Date.now()) / 1000)) : 0;
+  $('#m-title').textContent = gathering ? 'EMERGENCY' : 'MEETING';
+  $('#m-go').hidden = !gathering;
+  if (gathering) {
+    $('#m-go').innerHTML = `Everyone to the <b>${esc(S.gatherRoomName || '')}</b> - <b>${gsecs}s</b>`;
+    $('#m-timer').textContent = gsecs;
+    const gb = $('#m-bar');
+    if (gb) gb.style.setProperty('--p', String(S.gatherS ? Math.min(1, gsecs / S.gatherS) : 1));
+    $('#vote').innerHTML = '<p class="sub">The vote opens when the walk-in time is up.</p>';
+    $('#m-votes').textContent = '';
+    voteBuilt = false;
+    return;
+  }
   const secs = Math.max(0, Math.ceil((S.meetingEnds - Date.now()) / 1000));
   $('#m-timer').textContent = secs;
   const bar = $('#m-bar');
@@ -801,6 +817,8 @@ function buildHouseEditor() {
       '<div class="he-task"><select id="he-da"></select><span class="sub">↔</span><select id="he-db"></select><button id="he-adddoor" class="ghost">+ door</button></div>' +
       '<h2>Settings</h2><label>Meeting / voting time (seconds, 15-300)</label><input id="he-meeting" type="number" min="15" max="300" step="5">' +
       '<label>Emergency calls per crew member, per round (0-5)</label><input id="he-emergency" type="number" min="0" max="5" step="1">' +
+      '<label>Emergency walk-in time (seconds, 5-120) - everyone meets before the vote</label><input id="he-gather" type="number" min="5" max="120" step="5">' +
+      '<label>Emergency meeting room</label><select id="he-gatherroom"></select>' +
       '<h2>Tasks</h2><div id="he-tasks"></div><button id="he-add" class="ghost">+ task</button>';
 
     const drawAll = () => { drawFloors(); drawRooms(); drawDoors(); drawTasks(); drawSettings(); };
@@ -814,6 +832,16 @@ function buildHouseEditor() {
         h.settings.meetingS = Number.isFinite(n) ? Math.min(300, Math.max(15, n)) : 60;
         inp.value = h.settings.meetingS;
       });
+      const gr = $('#he-gather');
+      gr.value = h.settings.gatherS ?? 45;
+      gr.addEventListener('change', () => {
+        const n = Math.round(Number(gr.value));
+        h.settings.gatherS = Number.isFinite(n) ? Math.min(120, Math.max(5, n)) : 45;
+        gr.value = h.settings.gatherS;
+      });
+      const grr = $('#he-gatherroom');
+      grr.innerHTML = playRooms().map((r) => `<option value="${esc(r.id)}"${r.id === (h.settings.gatherRoom || 'room') ? ' selected' : ''}>${esc(r.name)}</option>`).join('');
+      grr.addEventListener('change', () => { h.settings.gatherRoom = grr.value; });
       const em = $('#he-emergency');
       em.value = h.settings.emergencyPerCrew ?? 1;
       em.addEventListener('change', () => {
@@ -1043,7 +1071,7 @@ async function restartLescan() {
 
 // Bumped whenever the client changes. It travels on every diag line, so a log
 // can never again be ambiguous about which version a phone is running.
-const BUILD = 'ui27';
+const BUILD = 'ui28';
 
 // Fire-and-forget note to the server so we can read what the phone did.
 function diag(o) {

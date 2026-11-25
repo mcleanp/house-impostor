@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>House Impostor</title>
-<link rel="stylesheet" href="style.css?v=ui27">
+<link rel="stylesheet" href="style.css?v=ui28">
 </head>
 <body>
 
 <!-- join -->
 <section id="scr-join" class="screen">
-  <div class="hero"><img src="img-hero-art.jpg?v=ui27" alt="Crewmates" width="960" height="620"></div>
+  <div class="hero"><img src="img-hero-art.jpg?v=ui28" alt="Crewmates" width="960" height="620"></div>
   <div id="floaters" aria-hidden="true"></div>
   <div class="card">
     <h1>House<br><span>Impostor</span></h1>
@@ -94,8 +94,9 @@
 <!-- meeting overlay -->
 <div id="scr-meeting" class="overlay" hidden>
   <div class="card">
-    <h1>MEETING <span id="m-timer">60</span></h1>
+    <h1><span id="m-title">MEETING</span> <span id="m-timer">60</span></h1>
     <div id="m-bar" class="mbar"></div>
+    <p id="m-go" class="mgo" hidden></p>
     <p id="m-reason" class="sub"></p>
     <div id="vote"></div>
     <button id="btn-skip" class="ghost">Skip vote</button>
@@ -135,7 +136,7 @@
 
 <div id="toast"></div>
 
-<script src="config.js?v=ui27"></script>
-<script src="app.js?v=ui27"></script>
+<script src="config.js?v=ui28"></script>
+<script src="app.js?v=ui28"></script>
 </body>
 </html>

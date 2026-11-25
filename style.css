@@ -230,6 +230,7 @@ header b{font-family:ui-monospace,monospace;letter-spacing:.2em;color:var(--gold
 .overlay{position:fixed;inset:0;background:rgba(4,9,26,.94);display:flex;align-items:center;justify-content:center;z-index:20;padding:1rem}
 .overlay .card{width:100%;max-width:520px;max-height:90vh;overflow:auto}
 #m-timer{color:var(--red)}
+.mgo{font-size:1.05rem;font-weight:800;color:var(--gold);text-align:center;margin:.2rem 0 .4rem}
 /* time left, as a shrinking bar - readable at a glance across a room */
 .mbar{height:10px;border-radius:99px;background:#0a1a3c;border:2px solid var(--line);overflow:hidden;margin:.2rem 0 .6rem}
 .mbar::before{content:"";display:block;height:100%;width:calc(var(--p,1) * 100%);background:linear-gradient(90deg,var(--red),var(--gold));transition:width .5s linear}

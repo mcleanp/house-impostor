@@ -35,6 +35,8 @@ const RULES = {
   KILL_COOLDOWN_S: 45,
   POST_MEETING_COOLDOWN_S: 20,
   MEETING_S: 60,            // default; the host can change it in Setup (house.settings)
+  GATHER_S: 45,             // emergency: seconds to walk to the gather room first
+  GATHER_ROOM: 'room',      // default gather room (the dining room)
   RSSI_FLOOR: -92,          // dBm: weaker than this proves nothing
   RSSI_MARGIN: 5,           // winner must beat 2nd-best beacon by this much
   BEACON_STALE_S: 6,        // beacon report older than this is ignored
@@ -217,9 +219,16 @@ function normaliseHouse(h) {
   // cannot set a silly meeting length.
   const ms = Math.round(Number((h.settings || {}).meetingS));
   const em = Math.round(Number((h.settings || {}).emergencyPerCrew));
+  const gr = Math.round(Number((h.settings || {}).gatherS));
+  const gid = String((h.settings || {}).gatherRoom || '');
+  const roomIds = new Set(h.rooms.map((r) => r.id));
   h.settings = {
     meetingS: Number.isFinite(ms) ? Math.min(300, Math.max(15, ms)) : RULES.MEETING_S,
     emergencyPerCrew: Number.isFinite(em) ? Math.min(5, Math.max(0, em)) : 1,
+    // An emergency is not a meeting yet: everyone first has this long to walk
+    // to the gather room. Bounded so a typo cannot strand the game.
+    gatherS: Number.isFinite(gr) ? Math.min(120, Math.max(5, gr)) : RULES.GATHER_S,
+    gatherRoom: roomIds.has(gid) && gid !== 'lobby' ? gid : RULES.GATHER_ROOM,
   };
   // The lobby is the "out" area: dead players walk there. Not part of the
   // movement graph, never a task room, always present.
@@ -421,7 +430,7 @@ function makeRoom(code) {
     code, players: new Map(), order: [], hostId: null,
     state: 'lobby',            // lobby | playing | meeting | over
     levelId: 'house',
-    startedAt: 0, killReadyAt: 0, meetingEnds: 0,
+    startedAt: 0, killReadyAt: 0, meetingEnds: 0, gatherEnds: 0, gatherRoom: '',
     votes: new Map(), emergencyUsed: new Map(), bodies: [],   // bodies: [{room, victimId}]; emergencyUsed: id -> count
     events: [], overSent: false,
   };
@@ -590,14 +599,29 @@ function emergencyAllowance() {
   return Number.isFinite(n) && n >= 0 && n <= 5 ? n : 1;
 }
 
+/* Where an emergency sends everyone, and for how long. */
+function gatherSeconds() {
+  const n = Math.round(Number((HOUSE.settings || {}).gatherS));
+  return Number.isFinite(n) && n >= 5 && n <= 120 ? n : RULES.GATHER_S;
+}
+function gatherRoom() {
+  const id = String((HOUSE.settings || {}).gatherRoom || '');
+  return id && id !== 'lobby' && roomById(id) ? id : RULES.GATHER_ROOM;
+}
+
 function meetingSeconds() {
   const n = Math.round(Number((HOUSE.settings || {}).meetingS));
   return Number.isFinite(n) && n >= 15 && n <= 300 ? n : RULES.MEETING_S;
 }
 
-function startMeeting(room, reason) {
+/* opts.gather: an emergency call - everyone walks to the gather room first,
+ * then the same meeting runs. A body report goes straight to the meeting. */
+function startMeeting(room, reason, opts) {
+  const gather = !!(opts && opts.gather);
   room.state = 'meeting';
-  room.meetingEnds = Date.now() + meetingSeconds() * 1000;
+  room.gatherEnds = gather ? Date.now() + gatherSeconds() * 1000 : 0;
+  room.gatherRoom = gather ? gatherRoom() : '';
+  room.meetingEnds = Date.now() + (gather ? gatherSeconds() * 1000 + meetingSeconds() * 1000 : meetingSeconds() * 1000);
   room.votes.clear();
   room.killReadyAt = Date.now() + RULES.POST_MEETING_COOLDOWN_S * 1000;
   roomEvent(room, { type: 'meeting', text: reason });
@@ -638,7 +662,7 @@ function endMeeting(room) {
     roomEvent(room, { type: 'eject', text: 'No consensus - nobody was ejected.' });
   }
   room.state = 'playing';
-  room.meetingEnds = 0;
+  room.meetingEnds = 0; room.gatherEnds = 0; room.gatherRoom = '';
   checkWin(room);
 }
 
@@ -684,12 +708,15 @@ function snapshotFor(room, p) {
     state: room.state,
     now: Date.now(),
     killReadyAt: room.killReadyAt, meetingEnds: room.meetingEnds, meetingS: meetingSeconds(),
+    gatherEnds: room.gatherEnds || 0, gatherRoom: room.gatherRoom || '',
+    gatherS: gatherSeconds(), gatherRoomName: roomById(gatherRoom()).name,
     progress: inPlay ? Math.round(taskProgress(room) * 100) : 0,
     events: room.events.slice(-12),
     // `mine` lets the phone show which name it has already voted for. `tally`
     // is only sent once a vote is in, so the count cannot hint at who is who
     // before anyone has voted.
-    votes: room.state === 'meeting' ? {
+    // The ballot only appears once everyone has had time to walk to the room.
+    votes: room.state === 'meeting' && !(room.gatherEnds && Date.now() < room.gatherEnds) ? {
       cast: room.votes.size, of: alivePlayers(room).length, mine: room.votes.get(p.id) || null,
       tally: room.votes.size ? [...room.votes.values()].reduce((m, t) => (m[t] = (m[t] || 0) + 1, m), {}) : null,
     } : null,
@@ -774,7 +801,7 @@ function handleMsg(room, p, msg) {
       const used = room.emergencyUsed.get(p.id) || 0;
       if (used >= emergencyAllowance()) { p.conn.send({ t: 'nope', text: 'You already used your emergency button.' }); return; }
       room.emergencyUsed.set(p.id, used + 1);
-      startMeeting(room, `${p.name} called an emergency meeting.`);
+      startMeeting(room, `${p.name} called an emergency - everyone to the ${roomById(gatherRoom()).name}.`, { gather: true });
       broadcastState(room);
       break;
     }
