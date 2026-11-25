@@ -37,6 +37,7 @@ const RULES = {
   MEETING_S: 60,            // default; the host can change it in Setup (house.settings)
   GATHER_S: 45,             // emergency: seconds to walk to the gather room first
   GATHER_ROOM: 'room',      // default gather room (the dining room)
+  DELAY_KILL_S: 5,          // a delayed kill lands this long after the button
   RSSI_FLOOR: -92,          // dBm: weaker than this proves nothing
   RSSI_MARGIN: 5,           // winner must beat 2nd-best beacon by this much
   BEACON_STALE_S: 6,        // beacon report older than this is ignored
@@ -221,6 +222,7 @@ function normaliseHouse(h) {
   const em = Math.round(Number((h.settings || {}).emergencyPerCrew));
   const gr = Math.round(Number((h.settings || {}).gatherS));
   const gid = String((h.settings || {}).gatherRoom || '');
+  const dk = Math.round(Number((h.settings || {}).delayKillS));
   const roomIds = new Set(h.rooms.map((r) => r.id));
   h.settings = {
     meetingS: Number.isFinite(ms) ? Math.min(300, Math.max(15, ms)) : RULES.MEETING_S,
@@ -229,6 +231,9 @@ function normaliseHouse(h) {
     // to the gather room. Bounded so a typo cannot strand the game.
     gatherS: Number.isFinite(gr) ? Math.min(120, Math.max(5, gr)) : RULES.GATHER_S,
     gatherRoom: roomIds.has(gid) && gid !== 'lobby' ? gid : RULES.GATHER_ROOM,
+    // A delayed kill lets the impostor press Kill and be gone before the body
+    // appears. 0 turns the feature off (kills stay instant).
+    delayKillS: Number.isFinite(dk) ? Math.min(60, Math.max(0, dk)) : RULES.DELAY_KILL_S,
   };
   // The lobby is the "out" area: dead players walk there. Not part of the
   // movement graph, never a task room, always present.
@@ -430,7 +435,7 @@ function makeRoom(code) {
     code, players: new Map(), order: [], hostId: null,
     state: 'lobby',            // lobby | playing | meeting | over
     levelId: 'house',
-    startedAt: 0, killReadyAt: 0, meetingEnds: 0, gatherEnds: 0, gatherRoom: '',
+    startedAt: 0, killReadyAt: 0, meetingEnds: 0, gatherEnds: 0, gatherRoom: '', pendingKills: [],
     votes: new Map(), emergencyUsed: new Map(), bodies: [],   // bodies: [{room, victimId}]; emergencyUsed: id -> count
     events: [], overSent: false,
   };
@@ -542,6 +547,7 @@ function startGame(room, levelId) {
   room.bodies = [];
   room.votes.clear();
   room.emergencyUsed.clear();
+  room.pendingKills = [];
   room.overSent = false;
   room.heldWin = false;
   roomEvent(room, { type: 'start', text: `Round started on "${(HOUSE.levels.find((l) => l.id === levelId) || {}).name}". Doors are live.` });
@@ -579,8 +585,17 @@ function killPlayer(room, killer, victimId) {
   if (!v || !v.joined || !v.alive || v.director || v.role === 'impostor') return null;
   if (v.room !== killer.room) return 'They are not in your room.';
   if (Date.now() < room.killReadyAt) return 'Kill cooldown not ready.';
-  v.alive = false; v.room = 'lobby'; v.roomSource = 'dead'; v.hold = null;
+  const delay = delayKillSeconds();
   room.killReadyAt = Date.now() + RULES.KILL_COOLDOWN_S * 1000;
+  if (delay > 0) {
+    // The victim keeps walking for `delay` more seconds - that is the whole
+    // point: the impostor is already gone when the body appears.
+    room.pendingKills.push({ room: killer.room, victimId, byId: killer.id, at: Date.now() + delay * 1000 });
+    v.conn.send({ t: 'nope', text: `You have been marked - it lands in ${delay}s.` });
+    killer.conn.send({ t: 'nope', text: `Kill set on ${v.name} in the ${roomById(killer.room).name} - it lands in ${delay}s. Walk away.` });
+    return null;
+  }
+  v.alive = false; v.room = 'lobby'; v.roomSource = 'dead'; v.hold = null;
   room.bodies.push({ room: killer.room, victimId, ts: Date.now() });
   // Public feed line: who, but NOT where - the room is half the puzzle and the
   // body is found by walking into it. The killer and the victim each get a
@@ -607,6 +622,11 @@ function gatherSeconds() {
 function gatherRoom() {
   const id = String((HOUSE.settings || {}).gatherRoom || '');
   return id && id !== 'lobby' && roomById(id) ? id : RULES.GATHER_ROOM;
+}
+
+function delayKillSeconds() {
+  const n = Math.round(Number((HOUSE.settings || {}).delayKillS));
+  return Number.isFinite(n) && n >= 0 && n <= 60 ? n : RULES.DELAY_KILL_S;
 }
 
 function meetingSeconds() {
@@ -663,6 +683,7 @@ function endMeeting(room) {
   }
   room.state = 'playing';
   room.meetingEnds = 0; room.gatherEnds = 0; room.gatherRoom = '';
+  room.pendingKills = [];
   checkWin(room);
 }
 
@@ -710,6 +731,7 @@ function snapshotFor(room, p) {
     killReadyAt: room.killReadyAt, meetingEnds: room.meetingEnds, meetingS: meetingSeconds(),
     gatherEnds: room.gatherEnds || 0, gatherRoom: room.gatherRoom || '',
     gatherS: gatherSeconds(), gatherRoomName: roomById(gatherRoom()).name,
+    delayKillS: delayKillSeconds(),
     progress: inPlay ? Math.round(taskProgress(room) * 100) : 0,
     events: room.events.slice(-12),
     // `mine` lets the phone show which name it has already voted for. `tally`
@@ -725,6 +747,7 @@ function snapshotFor(room, p) {
       role: room.state === 'lobby' ? undefined : p.role,
       tasks: me ? (p.tasks || []) : undefined,
       roomSource: p.roomSource,
+      marked: room.pendingKills.some((k) => k.victimId === p.id),
       beaconRoom: resolveRoom(p.id),
       moveTo: p.alive ? neighbours(p.room).filter((id) => levelRooms(room).has(id)) : [],
       emergencyLeft: room.state === 'playing' && p.alive
@@ -835,7 +858,7 @@ function handleMsg(room, p, msg) {
     }
     case 'reset': {
       if (p.id !== room.hostId) return;
-      room.state = 'lobby'; room.bodies = []; room.votes.clear();
+      room.state = 'lobby'; room.bodies = []; room.votes.clear(); room.pendingKills = [];
       for (const q of room.players.values()) { q.alive = true; q.role = undefined; q.tasks = []; q.room = null; }
       roomEvent(room, { type: 'reset', text: 'Back to lobby.' });
       broadcastState(room);
@@ -1132,6 +1155,22 @@ setInterval(() => {
   for (const room of rooms.values()) {
     let dirty = false;
     if (room.state === 'meeting' && room.meetingEnds && now >= room.meetingEnds) { endMeeting(room); dirty = true; }
+    // Delayed kills land here. The body is placed in the room the kill was set
+    // in, not where the victim has since wandered - the two are the same thing
+    // while the delay is short, and this keeps the feed honest.
+    if (room.state === 'playing' && room.pendingKills.length) {
+      for (const k of room.pendingKills.slice()) {
+        if (now < k.at) continue;
+        room.pendingKills.splice(room.pendingKills.indexOf(k), 1);
+        const v = room.players.get(k.victimId), by = room.players.get(k.byId);
+        if (!v || !v.alive) continue;
+        v.alive = false; v.room = 'lobby'; v.roomSource = 'dead'; v.hold = null;
+        room.bodies.push({ room: k.room, victimId: v.id, ts: now });
+        roomEvent(room, { type: 'kill', text: `${by ? by.name : 'The impostor'} killed ${v.name}.` });
+        try { v.conn.send({ t: 'died', by: by ? by.name : 'the impostor', room: k.room }); } catch {}
+        dirty = true;
+      }
+    }
     if (room.state === 'playing' || room.state === 'lobby') {
       for (const p of room.players.values()) {
         if (!p.joined || p.director || !p.alive) continue;
