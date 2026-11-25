@@ -602,6 +602,10 @@ function endMeeting(room) {
 }
 
 function checkWin(room) {
+  // Lobby is not a round: roles are still unassigned, so every "all impostors
+  // found" test below is meaningless there. Leaving the lobby used to flip the
+  // room to 'over' with a crew win before a game had ever started.
+  if (room.state !== 'playing' && room.state !== 'meeting') return;
   if (room.state === 'over') return;
   const alive = alivePlayers(room);
   const imp = alive.filter((p) => p.role === 'impostor');
