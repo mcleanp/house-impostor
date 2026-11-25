@@ -348,7 +348,9 @@ function reresolveLive() {
     let dirty = false;
     for (const pl of room.players.values()) {
       if (!pl.joined || pl.director || !pl.alive) continue;
-      if (room.state !== 'playing' && room.state !== 'lobby') continue;
+      // 'over' too: the role-reveal screen is where everyone stands around
+      // reading who was the impostor, and their rooms must still track.
+      if (room.state === 'meeting') continue;
       const best = resolveRoom(pl.id, pl.roomSource === 'beacon' ? pl.room : null);
       if (best) pl.lastGoodAt = Date.now();   // fresh evidence: reset the grace clock
       if (best && best !== pl.room) {
@@ -788,9 +790,20 @@ const server = http.createServer((req, res) => {
       .sort((a, b) => (a.state === 'lobby' ? 0 : 1) - (b.state === 'lobby' ? 0 : 1))[0];
     let code = fresh && fresh.code;
     if (!code) {
-      if (Date.now() - lastAutoRoomAt < 5000 && lastAutoRoom && rooms.has(lastAutoRoom)) code = lastAutoRoom;
+      // Nothing live: a room left over from the last round is the house, so
+      // hand that back rather than minting a new code. Otherwise every phone
+      // that opens the page after a round lands in a room of its own and the
+      // family is split across games that cannot see each other. Only a room
+      // nobody has stayed in (no players at all) is skipped, and the 5 s cache
+      // still absorbs a burst of phones arriving together.
+      const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      const stale = Date.now() - lastAutoRoomAt < 5000 && lastAutoRoom && rooms.get(lastAutoRoom);
+      const leftover = [...rooms.values()]
+        .filter((r) => [...r.players.values()].some((p) => p.joined && !p.director))
+        .sort((a, b) => (b.players.size - a.players.size) || (b.startedAt - a.startedAt))[0];
+      if (stale) code = lastAutoRoom;
+      else if (leftover) { code = leftover.code; lastAutoRoom = code; lastAutoRoomAt = Date.now(); }
       else {
-        const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
         do { code = Array.from({ length: 4 }, () => A[crypto.randomInt(A.length)]).join(''); } while (rooms.has(code));
         makeRoom(code);
         lastAutoRoom = code; lastAutoRoomAt = Date.now();
