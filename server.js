@@ -627,8 +627,11 @@ function snapshotFor(room, p) {
   // Fog of war by room - EXCEPT during a meeting, where everyone is on the
   // same call and must be able to vote for anyone. Without this the ballot was
   // limited to whoever happened to share your room (often nobody).
+  // Lobby has no fog either: everyone is milling about waiting, and a player
+  // whose beacon has not resolved yet (room null) would otherwise be invisible
+  // to the whole room - and see nobody - so the host could never count them.
   const visible = [...room.players.values()].filter((q) => q.joined && !q.director
-    && (room.state === 'meeting' || p.director || !p.alive || !q.alive
+    && (room.state === 'lobby' || room.state === 'meeting' || p.director || !p.alive || !q.alive
         ? true : q.room === p.room && q.alive));
   const me = p.director ? null : p;
   return {
