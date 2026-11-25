@@ -36,8 +36,10 @@ let myColor = '#7dd3fc';
 function colorKey(pid) { return 'hi-color:' + (pid || 'new'); }
 function loadColor() {
   const pid = localStorage.getItem('hi-pid') || '';
-  const c = (localStorage.getItem(colorKey(pid)) || localStorage.getItem('hi-color') || '').toUpperCase();
-  myColor = COLORS.includes(c) ? c : COLORS[Math.floor(Math.random() * COLORS.length)];
+  // The server echoes colours upper-cased, the swatch list is lower-case, so
+  // match case-insensitively and keep the canonical spelling.
+  const c = (localStorage.getItem(colorKey(pid)) || localStorage.getItem('hi-color') || '').toLowerCase();
+  myColor = COLORS.find((x) => x === c) || COLORS[Math.floor(Math.random() * COLORS.length)];
 }
 function drawSwatches() {
   const el = $('#swatches');
@@ -134,7 +136,7 @@ function onMsg(m) {
   switch (m.t) {
     case 'welcome':
       me = { id: m.id, name: m.name, hostId: m.hostId, director: !!m.director };
-      if (m.color) myColor = m.color;
+      if (m.color) myColor = COLORS.find((x) => x === String(m.color).toLowerCase()) || myColor;
       try {
         localStorage.setItem('hi-pid', m.id);   // survive a refresh
         // Pin the colour to this player id, so a refresh cannot re-roll it.
@@ -981,7 +983,7 @@ async function pairBeacon() {
 // navigator.bluetooth.requestLEScan. Both need a user gesture to start.
 let scanArmed = false, seen = {}, lescan = null, sampleTimer = null, scanDevs = [];
 let lastAdvertAt = 0, lastRestartAt = 0, restarting = false, newBeaconTimer = null;
-let lastReportAt = 0, tapTimer = null, manualMode = false, manualRoomId = '';
+let lastReportAt = 0, tapTimer = null, manualMode = false, manualRoomId = '', watchingNow = 0;
 
 function onAdvert(e) {
   const d = e.device || {};
@@ -1017,11 +1019,15 @@ async function restartLescan() {
   restarting = false;
 }
 
+// Bumped whenever the client changes. It travels on every diag line, so a log
+// can never again be ambiguous about which version a phone is running.
+const BUILD = 'ui26';
+
 // Fire-and-forget note to the server so we can read what the phone did.
 function diag(o) {
   // The user agent travels with every report: without it an "arm-none" line
   // cannot be told apart between iPhone, Android Chrome and desktop.
-  const body = { ...o, ua: (navigator.userAgent || '').slice(0, 160) };
+  const body = { ...o, build: BUILD, ua: (navigator.userAgent || '').slice(0, 160) };
   try { fetch('/api/diag', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); } catch {}
 }
 
@@ -1118,7 +1124,7 @@ async function armScan() {
       // No way to hear advertisements: the picked board IS the room. Report it
       // once, then re-send on the heartbeat so the server TTL never expires.
       if (!watching && devs.length) {
-        manualMode = true;
+        manualMode = true; watchingNow = 0;
         manualRoomId = (devs[0].name || '').replace(CFG.BLE_PREFIX || 'HB-', '');
         scanArmed = true;
         clearInterval(sampleTimer);
@@ -1143,7 +1149,7 @@ async function armScan() {
         return;
       }
     }
-    scanArmed = true;
+    scanArmed = true; watchingNow = watching;
     lastAdvertAt = Date.now(); lastRestartAt = Date.now();
     clearInterval(sampleTimer);
     sampleTimer = setInterval(reportScan, CFG.SCAN_EVERY_MS || 8000);
@@ -1162,7 +1168,7 @@ async function armScan() {
 }
 
 function disarmScan() {
-  scanArmed = false; manualMode = false; manualRoomId = '';
+  scanArmed = false; manualMode = false; manualRoomId = ''; watchingNow = 0;
   clearInterval(sampleTimer);
   try { if (lescan && lescan.stop) lescan.stop(); } catch {}
   lescan = null;
@@ -1252,6 +1258,13 @@ document.addEventListener('pointerdown', () => {
   if (!me || $('#scr-game').hidden) return;
   if (!$('#reveal').hidden) return;
   reportNow();
+  // A refresh resumes with no tap, so the picker was opened without a gesture
+  // and Chrome refused it. The next tap anywhere is a real gesture: re-pick
+  // there. Only when the scan is armed but has nothing to hear from.
+  if (!me.director && !manualMode && !scanDevs.length) {
+    pickDevice();
+    if (pickPromise) armScan();
+  }
 }, { passive: true });
 
 /* ------------------------------------------------------------------ wire */
