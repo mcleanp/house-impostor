@@ -120,6 +120,7 @@ function onMsg(m) {
       }
       break;
     case 'state': S = m; render(); break;
+    case 'pong': break;
     case 'died':
       toast(`You are dead. Walk to the lobby. (${m.room})`, 'bad', 8000);
       if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
@@ -284,7 +285,10 @@ function renderFloorplan() {
         `<span title="${esc(p.name)}${p.alive ? '' : ' (out)'}" style="${p.id === me.id ? 'filter:drop-shadow(0 0 4px #ffd23f)' : ''}">${crew(p.id, !p.alive)}</span>`).join('')
         + (dir ? people.filter((p) => p.role === 'impostor').map(() => '<span class="imp-mark">★</span>').join('') : '');
       const locked = !dir && you.moveTo && !you.moveTo.includes(r.id) && r.id !== here && !r.lobby && S.state === 'playing';
-      return `<div class="room ${r.id === here ? 'here' : ''} ${locked ? 'locked' : ''}" data-r="${esc(r.id)}">
+      // `here` is written from the live snapshot, never from a stale flag, so a
+      // room you just left cannot keep the ring.
+      const isHere = !!here && r.id === here;
+      return `<div class="room ${isHere ? 'here' : ''} ${locked ? 'locked' : ''}" data-r="${esc(r.id)}"${isHere ? ' aria-current="true"' : ''}>
         <span class="nm">${esc(r.name)}</span>${bodies.length ? '<span class="body">💀</span>' : ''}
         <div class="dots">${dots}</div></div>`;
     }).join('');

@@ -159,6 +159,126 @@
   "_tasks": "Chores, honestly done, in the room listed. Each player gets 4 at random from the rooms of the chosen level. The hold button only counts while the server believes you are in that room.",
   "tasks": [
     {
+      "room": "bed1",
+      "name": "Swipe your ID card",
+      "game": "swipe",
+      "kind": "short"
+    },
+    {
+      "room": "bed1",
+      "name": "Unlock the manifolds",
+      "game": "keys",
+      "kind": "short"
+    },
+    {
+      "room": "bed1",
+      "name": "Align the engine output",
+      "game": "align",
+      "kind": "short"
+    },
+    {
+      "room": "bed1",
+      "name": "Clean the O2 filter",
+      "game": "leaves",
+      "kind": "short"
+    },
+    {
+      "room": "bed1",
+      "name": "Chart the course",
+      "game": "keypad",
+      "kind": "short"
+    },
+    {
+      "room": "bed1",
+      "name": "Fix the wiring",
+      "game": "wires",
+      "kind": "short"
+    },
+    {
+      "room": "bed1",
+      "name": "Prime the shields",
+      "game": "hexes",
+      "kind": "short"
+    },
+    {
+      "room": "bed1",
+      "name": "Divert the power",
+      "game": "align",
+      "kind": "short"
+    },
+    {
+      "room": "bed1",
+      "name": "Submit to the scanner",
+      "game": "scan",
+      "kind": "long"
+    },
+    {
+      "room": "bed1",
+      "name": "Upload the data",
+      "game": "upload",
+      "kind": "long"
+    },
+    {
+      "room": "bed2",
+      "name": "Fix the wiring",
+      "game": "wires",
+      "kind": "short"
+    },
+    {
+      "room": "bed2",
+      "name": "Upload the data",
+      "game": "upload",
+      "kind": "long"
+    },
+    {
+      "room": "bed2",
+      "name": "Calibrate the distributor",
+      "game": "align",
+      "kind": "short"
+    },
+    {
+      "room": "bed2",
+      "name": "Press the manifold keys",
+      "game": "keys",
+      "kind": "short"
+    },
+    {
+      "room": "bed2",
+      "name": "Swipe the card reader",
+      "game": "swipe",
+      "kind": "short"
+    },
+    {
+      "room": "bed2",
+      "name": "Repeat the reactor sequence",
+      "game": "keypad",
+      "kind": "short"
+    },
+    {
+      "room": "bed2",
+      "name": "Clear the vent",
+      "game": "leaves",
+      "kind": "short"
+    },
+    {
+      "room": "bed2",
+      "name": "Inspect the sample",
+      "game": "sample",
+      "kind": "long"
+    },
+    {
+      "room": "bed2",
+      "name": "Prime the shields",
+      "game": "hexes",
+      "kind": "short"
+    },
+    {
+      "room": "bed2",
+      "name": "Submit to the scanner",
+      "game": "scan",
+      "kind": "long"
+    },
+    {
       "room": "bath",
       "name": "Wipe the mirror clean",
       "game": "swipe",
@@ -183,40 +303,28 @@
       "kind": "long"
     },
     {
-      "room": "room",
-      "name": "Empty the garbage chute",
-      "game": "fuel",
-      "kind": "long"
-    },
-    {
-      "room": "room",
-      "name": "Put the dishes away",
-      "game": "asteroids",
-      "kind": "long"
-    },
-    {
-      "room": "room",
-      "name": "Sort the shelf into order",
-      "game": "hexes",
+      "room": "bath",
+      "name": "Fix the wiring",
+      "game": "wires",
       "kind": "short"
     },
     {
-      "room": "room2",
-      "name": "Put away everything on the counter",
-      "game": "fuel",
-      "kind": "long"
-    },
-    {
-      "room": "room2",
+      "room": "bath",
       "name": "Calibrate the distributor",
       "game": "align",
       "kind": "short"
     },
     {
-      "room": "room2",
-      "name": "Unlock the manifolds",
-      "game": "keys",
+      "room": "bath",
+      "name": "Prime the shields",
+      "game": "hexes",
       "kind": "short"
+    },
+    {
+      "room": "bath",
+      "name": "Upload the data",
+      "game": "upload",
+      "kind": "long"
     },
     {
       "room": "down",
@@ -243,28 +351,142 @@
       "kind": "short"
     },
     {
-      "room": "bed1",
-      "name": "Swipe your card",
+      "room": "down",
+      "name": "Clear the asteroids",
+      "game": "asteroids",
+      "kind": "long"
+    },
+    {
+      "room": "down",
+      "name": "Start the reactor",
+      "game": "keypad",
+      "kind": "short"
+    },
+    {
+      "room": "down",
+      "name": "Fuel the engines",
+      "game": "fuel",
+      "kind": "long"
+    },
+    {
+      "room": "down",
+      "name": "Swipe the card reader",
       "game": "swipe",
       "kind": "short"
     },
     {
-      "room": "bed1",
+      "room": "down",
       "name": "Unlock the manifolds",
       "game": "keys",
       "kind": "short"
     },
     {
-      "room": "bed2",
+      "room": "down",
+      "name": "Clean the vent",
+      "game": "leaves",
+      "kind": "short"
+    },
+    {
+      "room": "room",
+      "name": "Empty the garbage chute",
+      "game": "fuel",
+      "kind": "long"
+    },
+    {
+      "room": "room",
+      "name": "Put the dishes away",
+      "game": "asteroids",
+      "kind": "long"
+    },
+    {
+      "room": "room",
+      "name": "Sort the shelf into order",
+      "game": "hexes",
+      "kind": "short"
+    },
+    {
+      "room": "room",
+      "name": "Divert the power",
+      "game": "align",
+      "kind": "short"
+    },
+    {
+      "room": "room",
       "name": "Fix the wiring",
       "game": "wires",
       "kind": "short"
     },
     {
-      "room": "bed2",
+      "room": "room",
       "name": "Upload the data",
       "game": "upload",
       "kind": "long"
+    },
+    {
+      "room": "room",
+      "name": "Submit to the scanner",
+      "game": "scan",
+      "kind": "long"
+    },
+    {
+      "room": "room",
+      "name": "Chart the course",
+      "game": "keypad",
+      "kind": "short"
+    },
+    {
+      "room": "room",
+      "name": "Inspect the sample",
+      "game": "sample",
+      "kind": "long"
+    },
+    {
+      "room": "room2",
+      "name": "Put away everything on the counter",
+      "game": "fuel",
+      "kind": "long"
+    },
+    {
+      "room": "room2",
+      "name": "Calibrate the distributor",
+      "game": "align",
+      "kind": "short"
+    },
+    {
+      "room": "room2",
+      "name": "Unlock the manifolds",
+      "game": "keys",
+      "kind": "short"
+    },
+    {
+      "room": "room2",
+      "name": "Clean the O2 filter",
+      "game": "leaves",
+      "kind": "short"
+    },
+    {
+      "room": "room2",
+      "name": "Swipe the card reader",
+      "game": "swipe",
+      "kind": "short"
+    },
+    {
+      "room": "room2",
+      "name": "Prime the shields",
+      "game": "hexes",
+      "kind": "short"
+    },
+    {
+      "room": "room2",
+      "name": "Clear the asteroids",
+      "game": "asteroids",
+      "kind": "long"
+    },
+    {
+      "room": "room2",
+      "name": "Start the reactor",
+      "game": "keypad",
+      "kind": "short"
     },
     {
       "room": "base1",
@@ -279,6 +501,42 @@
       "kind": "short"
     },
     {
+      "room": "base1",
+      "name": "Fix the wiring",
+      "game": "wires",
+      "kind": "short"
+    },
+    {
+      "room": "base1",
+      "name": "Fuel the engines",
+      "game": "fuel",
+      "kind": "long"
+    },
+    {
+      "room": "base1",
+      "name": "Divert the power",
+      "game": "align",
+      "kind": "short"
+    },
+    {
+      "room": "base1",
+      "name": "Submit to the scanner",
+      "game": "scan",
+      "kind": "long"
+    },
+    {
+      "room": "base1",
+      "name": "Upload the data",
+      "game": "upload",
+      "kind": "long"
+    },
+    {
+      "room": "base1",
+      "name": "Prime the shields",
+      "game": "hexes",
+      "kind": "short"
+    },
+    {
       "room": "base2",
       "name": "Divert the power",
       "game": "align",
@@ -289,6 +547,54 @@
       "name": "Clean the vent",
       "game": "leaves",
       "kind": "short"
+    },
+    {
+      "room": "base2",
+      "name": "Inspect the sample",
+      "game": "sample",
+      "kind": "long"
+    },
+    {
+      "room": "base2",
+      "name": "Calibrate the distributor",
+      "game": "align",
+      "kind": "short"
+    },
+    {
+      "room": "base2",
+      "name": "Unlock the manifolds",
+      "game": "keys",
+      "kind": "short"
+    },
+    {
+      "room": "base2",
+      "name": "Fix the wiring",
+      "game": "wires",
+      "kind": "short"
+    },
+    {
+      "room": "base2",
+      "name": "Empty the garbage chute",
+      "game": "fuel",
+      "kind": "long"
+    },
+    {
+      "room": "base2",
+      "name": "Start the reactor",
+      "game": "keypad",
+      "kind": "short"
+    },
+    {
+      "room": "base2",
+      "name": "Clear the asteroids",
+      "game": "asteroids",
+      "kind": "long"
+    },
+    {
+      "room": "base2",
+      "name": "Submit to the scanner",
+      "game": "scan",
+      "kind": "long"
     }
   ],
   "beacons": [],

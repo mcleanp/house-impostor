@@ -185,8 +185,18 @@ header b{font-family:ui-monospace,monospace;letter-spacing:.2em;color:var(--gold
 .room[data-r="room"]{background-image:linear-gradient(180deg,rgba(31,107,74,.72),rgba(15,58,40,.86)),url("img-room-room.jpg")}
 .room[data-r="room2"]{background-image:linear-gradient(180deg,rgba(122,106,30,.72),rgba(69,59,13,.86)),url("img-room-room2.jpg")}
 .room[data-r="lobby"]{background-image:linear-gradient(180deg,rgba(42,53,80,.72),rgba(22,29,44,.86)),url("img-room-lobby.jpg")}
-.room.here{border-color:var(--gold);box-shadow:inset 0 0 0 2px var(--gold), 0 0 18px rgba(255,210,63,.45)}
-.room.here::after{background:var(--gold);height:4px;opacity:.9}
+/* Where you are. An outline (not a border) so it can never be swallowed by the
+   room photo or the inset shadow, plus a ring and a label - Android Chrome
+   drops a lone box-shadow glow far more readily than Safari does. */
+.room.here{
+  border-color:var(--gold);
+  outline:3px solid var(--gold);outline-offset:2px;
+  box-shadow:inset 0 0 0 3px var(--gold), 0 0 0 3px rgba(255,210,63,.35), 0 0 18px rgba(255,210,63,.55);
+  z-index:2;
+}
+.room.here::after{background:var(--gold);height:5px;opacity:1}
+.room.here .nm::after{content:" · you are here";color:var(--gold);font-weight:900;white-space:nowrap}
+.room.here .nm{color:#fff}
 .room.locked{opacity:.34;filter:saturate(.5)}
 .room .dots{position:relative;z-index:1;display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;align-items:flex-end}
 .room .body{position:absolute;top:2px;right:4px;font-size:1rem;z-index:1}
