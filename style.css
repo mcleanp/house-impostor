@@ -192,6 +192,11 @@ header b{font-family:ui-monospace,monospace;letter-spacing:.2em;color:var(--gold
 .room .body{position:absolute;top:2px;right:4px;font-size:1rem;z-index:1}
 .room .body{position:absolute;top:2px;right:4px;font-size:1rem}
 
+/* director: impostor star on the map, roles in the roster */
+.room .imp-mark{position:relative;z-index:1;color:var(--red);font-size:.9rem;margin-left:.25rem;text-shadow:0 0 6px rgba(255,77,94,.8)}
+.person .pill{font-style:normal;font-size:.62rem}
+.person .sub{font-size:.72rem}
+
 /* ------------------------------------------------------------------ people */
 .person{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.35rem 0;border-bottom:2px dashed rgba(44,74,134,.6)}
 .person:last-child{border:0}

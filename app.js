@@ -113,8 +113,11 @@ function onMsg(m) {
       try { localStorage.setItem('hi-pid', m.id); } catch {}   // survive a refresh
       $('#scr-join').hidden = true;
       $('#scr-game').hidden = false;
-      autoReconnectBeacons();   // silently re-attach to beacons this phone already paired
-      if (!scanArmed) armScan();   // re-arm the room scan after a refresh
+      // A director only watches: no beacons, no BLE permission, no scanning.
+      if (!me.director) {
+        autoReconnectBeacons();   // silently re-attach to beacons this phone already paired
+        if (!scanArmed) armScan();   // re-arm the room scan after a refresh
+      }
       break;
     case 'state': S = m; render(); break;
     case 'died':
@@ -238,7 +241,8 @@ function render() {
   // Pairing must work BEFORE the round: the beacon only reports a room once a
   // phone is connected to it, so the lobby is exactly when you need this.
   const canPair = S.state === 'lobby' || S.state === 'over' || playing;
-  $('#panel-actions').hidden = !canPair;
+  // Directors never use beacons, so the whole BLE panel is noise for them.
+  $('#panel-actions').hidden = me.director ? true : !canPair;
   $('#btn-report').hidden = !playing;
   $('#btn-emergency').hidden = !playing;
   $('#btn-report').disabled = !(S.bodies || []).some((b) => b.room === you.room);
@@ -250,6 +254,7 @@ function renderFloorplan() {
   const fp = $('#floorplan');
   fp.innerHTML = '';
   const here = you.room;
+  const dir = !!me.director;
   for (const f of S.house.floors) {
     const rooms = S.house.rooms.filter((r) => r.floor === f.id);
     if (!rooms.length) continue;
@@ -259,8 +264,9 @@ function renderFloorplan() {
       const people = (S.people || []).filter((p) => p.room === r.id);
       const bodies = (S.bodies || []).filter((b) => b.room === r.id);
       const dots = people.map((p) =>
-        `<span title="${esc(p.name)}${p.alive ? '' : ' (out)'}" style="${p.id === me.id ? 'filter:drop-shadow(0 0 4px #ffd23f)' : ''}">${crew(p.id, !p.alive)}</span>`).join('');
-      const locked = you.moveTo && !you.moveTo.includes(r.id) && r.id !== here && !r.lobby && S.state === 'playing';
+        `<span title="${esc(p.name)}${p.alive ? '' : ' (out)'}" style="${p.id === me.id ? 'filter:drop-shadow(0 0 4px #ffd23f)' : ''}">${crew(p.id, !p.alive)}</span>`).join('')
+        + (dir ? people.filter((p) => p.role === 'impostor').map(() => '<span class="imp-mark">★</span>').join('') : '');
+      const locked = !dir && you.moveTo && !you.moveTo.includes(r.id) && r.id !== here && !r.lobby && S.state === 'playing';
       return `<div class="room ${r.id === here ? 'here' : ''} ${locked ? 'locked' : ''}" data-r="${esc(r.id)}">
         <span class="nm">${esc(r.name)}</span>${bodies.length ? '<span class="body">💀</span>' : ''}
         <div class="dots">${dots}</div></div>`;
@@ -272,8 +278,22 @@ function renderFloorplan() {
 
 function renderPeople() {
   const you = S.you || {};
-  const here = (S.people || []).filter((p) => p.room === you.room && p.id !== me.id);
   const el = $('#people');
+  if (me.director) {
+    // The director is watching the whole house: roster with roles, every room.
+    const all = (S.people || []).slice().sort((a, b) =>
+      (a.alive === b.alive ? 0 : a.alive ? -1 : 1) || String(a.room).localeCompare(String(b.room)));
+    el.innerHTML = all.length
+      ? all.map((p) => `<div class="person"><span class="who">${crew(p.id, !p.alive)}${esc(p.name)}
+          <span class="sub">${esc(roomName(p.room))}</span>
+          ${p.role ? `<i class="pill ${p.role}">${p.role}</i>` : ''}</span>
+          ${p.alive ? '' : '<span class="pill dead">out</span>'}</div>`).join('')
+      : '<p class="sub">Nobody has joined yet.</p>';
+    $('#panel-people').hidden = false;
+    $('#move').innerHTML = '';
+    return;
+  }
+  const here = (S.people || []).filter((p) => p.room === you.room && p.id !== me.id);
   el.innerHTML = here.length
     ? here.map((p) => `<div class="person"><span class="who">${crew(p.id, !p.alive)}${esc(p.name)} ${p.alive ? '' : '(down)'}${p.role ? ` <i>${p.role}</i>` : ''}</span>
         ${you.role === 'impostor' && p.alive && you.alive ? (() => {
@@ -300,7 +320,7 @@ function renderPeople() {
   }
   // Show the room panel when the beacon has something to say, even in the
   // lobby (no people/move buttons there, but the beacon line matters).
-  $('#panel-people').hidden = me.director ? false : !(here.length || mv.children.length || you.beaconRoom);
+  $('#panel-people').hidden = !(here.length || mv.children.length || you.beaconRoom);
 }
 
 function renderTasks() {
@@ -649,7 +669,10 @@ async function restartLescan() {
 
 // Fire-and-forget note to the server so we can read what the phone did.
 function diag(o) {
-  try { fetch('/api/diag', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(o) }); } catch {}
+  // The user agent travels with every report: without it an "arm-none" line
+  // cannot be told apart between iPhone, Android Chrome and desktop.
+  const body = { ...o, ua: (navigator.userAgent || '').slice(0, 160) };
+  try { fetch('/api/diag', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); } catch {}
 }
 
 // Arm once (needs a user gesture): attach the advertisement listener and start
@@ -657,7 +680,7 @@ function diag(o) {
 // choosers. The phone never connects to a beacon.
 async function armScan() {
   const st = $('#ble-status');
-  if (!navigator.bluetooth) { st.textContent = 'No Web Bluetooth here. iPhone: turn on the free "beacio" Safari extension (steps on the join screen).'; return; }
+  if (!navigator.bluetooth) { st.textContent = 'No Web Bluetooth here. iPhone: turn on the free "beacio" Safari extension. Android Chrome: allow Nearby devices + Location (steps on the join screen).'; return; }
   if (scanArmed) return;
   seen = {};
   let usedChooser = false, watching = 0, watchErr = '', pickErr = '', pickMs = 0, devNames = [], globalScan = false;
@@ -838,6 +861,14 @@ window.addEventListener('DOMContentLoaded', () => {
         '3. Or in Safari: tap the <b>aA</b> button in the address bar &gt; Manage Extensions &gt; beacio on &gt; Done, then tap <b>aA</b> &gt; beacio &gt; <b>Allow on Every Website</b>.<br>' +
         '4. Reload this page. iOS asks once to let beacio use Bluetooth - tap <b>Allow</b>.<br>' +
         'No extension? Tapping the doors still plays fine.';
+    } else if (/Android/.test(navigator.userAgent) && /Chrome/.test(navigator.userAgent)) {
+      $('#ble-warn').innerHTML =
+        '<b>Chrome on Android: turn Bluetooth on for this site.</b><br>' +
+        '1. Tap the <b>padlock</b> in the address bar &gt; <b>Permissions</b> &gt; <b>Nearby devices</b> &gt; Allow.<br>' +
+        '2. Android Settings &gt; Apps &gt; Chrome &gt; Permissions &gt; <b>Nearby devices</b> &gt; Allow.<br>' +
+        '3. Make sure phone <b>Location</b> is on and Chrome has Location permission - Android will not scan for beacons without it.<br>' +
+        '4. Reload this page and tap Join. Chrome shows a device picker the first time - pick any <b>HB-</b> board.<br>' +
+        'Still nothing? Chrome menu &gt; <b>Add to Home screen</b> and open it from there, or use Edge/Firefox. Tapping doors always works.';
     } else {
       $('#ble-warn').textContent = 'No Web Bluetooth here - you can still play by tapping the door you walk through.';
     }
@@ -845,8 +876,10 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // armScan must run inside the click gesture: the room auto-detect arms itself,
   // no extra tap, and it survives the await in joinGame.
-  $('#btn-join').addEventListener('click', () => { armScan(); joinGame(false); });
-  $('#btn-new').addEventListener('click', () => { armScan(); joinGame(true); });
+  // armScan runs inside the click gesture, but only for players - a director
+  // never touches Bluetooth, so the phone does not even ask for permission.
+  $('#btn-join').addEventListener('click', () => { if (!$('#in-director').checked) armScan(); joinGame(false); });
+  $('#btn-new').addEventListener('click', () => { if (!$('#in-director').checked) armScan(); joinGame(true); });
   $('#btn-menu').addEventListener('click', () => {
     const open = $('#menu').hidden;
     $('#menu').hidden = !open;
