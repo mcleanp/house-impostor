@@ -198,6 +198,11 @@ header b{font-family:ui-monospace,monospace;letter-spacing:.2em;color:var(--gold
 .room.here .nm::after{content:" · you are here";color:var(--gold);font-weight:900;white-space:nowrap}
 .room.here .nm{color:#fff}
 .room.locked{opacity:.34;filter:saturate(.5)}
+/* a room you can walk into right now: it looks like a door, and it never
+   double-taps-to-zoom on a phone */
+.room.go{cursor:pointer;touch-action:manipulation}
+.room.go:active{transform:scale(.97);border-color:var(--cyan)}
+.room.go::before{opacity:.75}
 .room .dots{position:relative;z-index:1;display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;align-items:flex-end}
 .room .body{position:absolute;top:2px;right:4px;font-size:1rem;z-index:1}
 .room .body{position:absolute;top:2px;right:4px;font-size:1rem}

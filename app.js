@@ -346,12 +346,22 @@ function renderFloorplan() {
       // `here` is written from the live snapshot, never from a stale flag, so a
       // room you just left cannot keep the ring.
       const isHere = showHere && r.id === hereMark;
-      return `<div class="room ${isHere ? 'here' : ''} ${locked ? 'locked' : ''}" data-r="${esc(r.id)}"${isHere ? ' aria-current="true"' : ''}>
+      const canGo = !dir && S.state === 'playing' && you.alive && !isHere
+        && ((you.moveTo || []).includes(r.id) || !you.room);
+      return `<div class="room ${isHere ? 'here' : ''} ${locked ? 'locked' : ''}${canGo ? ' go' : ''}" data-r="${esc(r.id)}"${isHere ? ' aria-current="true"' : ''}>
         <span class="nm">${esc(r.name)}</span>${bodies.length ? '<span class="body">💀</span>' : ''}
         <div class="dots">${dots}</div></div>`;
     }).join('');
     div.innerHTML = `<b>${esc(f.name)}</b><div class="floors-row">${row}</div>`;
     fp.appendChild(div);
+  }
+  // Tapping a room walks through its door. The server re-checks adjacency, so a
+  // wrong tap just answers with a reason instead of moving you.
+  if (S.state === 'playing' && you.alive && !dir) {
+    fp.querySelectorAll('.room[data-r]').forEach((el) => {
+      if (!el.classList.contains('go')) return;
+      el.addEventListener('click', () => send({ t: 'move', room: el.dataset.r }));
+    });
   }
 }
 
@@ -445,6 +455,12 @@ function renderTasks() {
  * and a minimum time; the phone only reports "finished". */
 let taskOpen = null;   // { task, at, done }
 
+/* Client-side minimum seconds per game. Mirrors the server's GAME_MIN_S, which
+ * is the one that actually decides - keep the two in step or the player gets a
+ * pointless "Too quick" round trip on every completion. */
+const GAME_MIN = { swipe: 3, keys: 4, wires: 4, align: 4, leaves: 4, hexes: 4, keypad: 6, asteroids: 8, sample: 6, fuel: 5, upload: 6, scan: 10 };
+const GAME_MIN_SHORT = 4, GAME_MIN_LONG = 8;
+
 function openTask(id) {
   const t = (S.you.tasks || []).find((x) => x.id === id);
   if (!t || t.done) return;
@@ -457,9 +473,15 @@ function openTask(id) {
   $('#tg-body').innerHTML = '';
   $('#tg-msg').textContent = '';
   $('#taskgame').hidden = false;
-  const min = (t.kind === 'long' ? 8 : 4);
+  const min = GAME_MIN[t.game] || (t.kind === 'long' ? GAME_MIN_LONG : GAME_MIN_SHORT);
   $('#tg-time').textContent = min + 's';
-  buildGame(t.game || 'hold', $('#tg-body'), () => finishTask());
+  try { buildGame(t.game || 'hold', $('#tg-body'), () => finishTask()); }
+  catch (e) {
+    // A builder that throws used to leave an empty pop-up and a stuck player.
+    taskOpen = null;
+    $('#tg-msg').textContent = `This task broke (${e.message}) - try it again.`;
+    setTimeout(closeTask, 1500);
+  }
 }
 
 function closeTask() {
@@ -470,7 +492,7 @@ function closeTask() {
 function finishTask() {
   if (!taskOpen || taskOpen.done) return;
   const elapsed = (Date.now() - taskOpen.at) / 1000;
-  const need = taskOpen.task.kind === 'long' ? 8 : 4;
+  const need = GAME_MIN[taskOpen.task.game] || (taskOpen.task.kind === 'long' ? GAME_MIN_LONG : GAME_MIN_SHORT);
   if (elapsed + 0.4 < need) {
     $('#tg-msg').textContent = `Too quick - keep it open ${Math.ceil(need - elapsed)}s more.`;
     setTimeout(() => { if (taskOpen) finishTask(); }, Math.ceil((need - elapsed) * 1000) + 100);
@@ -525,7 +547,7 @@ function buildGame(game, el, done) {
       + '</div><div class="wcol">' + shuffle(cols).map((c) => `<div class="wnode" data-c="${c}" style="--c:${c}"></div>`).join('') + '</div></div>';
     const nodes = [...el.querySelectorAll('.wcol')[1].children];
     let picked = null;
-    el.querySelectorAll('.wcol')[0].children.forEach((n, i) => n.addEventListener('click', () => { picked = n; el.querySelectorAll('.wnode').forEach((x) => x.classList.remove('sel')); n.classList.add('sel'); }));
+    [...el.querySelectorAll('.wcol')[0].children].forEach((n) => n.addEventListener('click', () => { picked = n; el.querySelectorAll('.wnode').forEach((x) => x.classList.remove('sel')); n.classList.add('sel'); }));
     nodes.forEach((n) => n.addEventListener('click', () => {
       if (!picked) return;
       if (picked.style.getPropertyValue('--c') === n.dataset.c) { picked.classList.add('ok'); n.classList.add('ok'); picked = null; if (el.querySelectorAll('.wnode.ok').length >= 8) done(); }
@@ -640,7 +662,7 @@ function buildGame(game, el, done) {
   if (game === 'scan') {
     el.innerHTML = '<p class="sub">stand still in the scanner</p><div class="scanner"><div class="beam"></div><span class="crew big" id="scancrew"></span></div>';
     $('#scancrew').style.setProperty('--c', myColor);
-    setTimeout(() => { if (taskOpen) done(); }, 9000);
+    setTimeout(() => { if (taskOpen) done(); }, GAME_MIN.scan * 1000);
     return;
   }
   // fallback: the old hold button
@@ -1021,7 +1043,7 @@ async function restartLescan() {
 
 // Bumped whenever the client changes. It travels on every diag line, so a log
 // can never again be ambiguous about which version a phone is running.
-const BUILD = 'ui26';
+const BUILD = 'ui27';
 
 // Fire-and-forget note to the server so we can read what the phone did.
 function diag(o) {
