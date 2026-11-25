@@ -296,6 +296,11 @@ function render() {
   // Directors never use beacons, so the whole BLE panel is noise for them.
   $('#panel-actions').hidden = me.director ? true : !canPair;
   $('#btn-report').hidden = !playing;
+  // Only an impostor, only mid-round, and only while alive.
+  const canKill = playing && you.role === 'impostor';
+  $('#btn-kill').hidden = !canKill;
+  if (!canKill) $('#panel-kill').hidden = true;
+  if (canKill && !$('#panel-kill').hidden) renderKill();
   $('#btn-emergency').hidden = !playing;
   $('#btn-report').disabled = !(S.bodies || []).some((b) => b.room === you.room);
   $('#btn-emergency').disabled = !you.emergencyLeft;
@@ -380,6 +385,26 @@ function renderPeople() {
   // Show the room panel when the beacon has something to say, even in the
   // lobby (no people/move buttons there, but the beacon line matters).
   $('#panel-people').hidden = !(here.length || mv.children.length || you.beaconRoom);
+}
+
+function renderKill() {
+  const you = S.you || {};
+  const box = $('#kill-list');
+  if (S.state !== 'playing' || you.role !== 'impostor' || !you.alive) {
+    box.innerHTML = '<p class="sub">No kill while the round is not running.</p>';
+    return;
+  }
+  const wait = Math.ceil(((S.killReadyAt || 0) - Date.now()) / 1000);
+  const others = (S.people || []).filter((p) => p.alive && p.id !== me.id);
+  if (!others.length) { box.innerHTML = '<p class="sub">Nobody else is alive.</p>'; return; }
+  box.innerHTML = others.map((p) => {
+    const inRoom = p.room === you.room;
+    const label = wait > 0 ? `Kill ${wait}s` : inRoom ? 'Kill' : 'Go there';
+    return `<div class="person"><span class="who">${crew(p.id, true)}${esc(p.name)}
+      <span class="sub">${p.room ? esc(roomName(p.room)) : 'not placed'}${inRoom ? ' - with you' : ''}</span></span>
+      <button class="danger" data-kill2="${p.id}" ${inRoom && wait <= 0 ? '' : 'disabled'}>${label}</button></div>`;
+  }).join('');
+  box.querySelectorAll('[data-kill2]').forEach((b) => b.addEventListener('click', () => send({ t: 'kill', victim: b.dataset.kill2 })));
 }
 
 function renderTasks() {
@@ -1223,6 +1248,14 @@ window.addEventListener('DOMContentLoaded', () => {
     $('#menu').hidden = !open;
     $('#btn-menu').setAttribute('aria-expanded', String(open));
   });
+  // A kill needs the player in the same room, so the Kill panel shows every
+  // player with their room and a button that is only live for the one you are
+  // standing with. An impostor does not have to work out the fog of war.
+  $('#btn-kill').addEventListener('click', () => {
+    const open = $('#panel-kill').hidden;
+    $('#panel-kill').hidden = !open;
+    if (open) renderKill();
+  });
   $('#btn-menu-close').addEventListener('click', () => {
     $('#menu').hidden = true;
     $('#btn-menu').setAttribute('aria-expanded', 'false');
@@ -1280,7 +1313,7 @@ window.addEventListener('DOMContentLoaded', () => {
   // meeting countdown + kill cooldown ticking locally
   setInterval(() => { if (S) { if (S.state === 'meeting') renderMeeting(); } }, 500);
   // kill cooldown ticks locally; the button only re-renders on a state push
-  setInterval(() => { if (S && S.state === 'playing' && S.you && S.you.role === 'impostor') renderPeople(); }, 1000);
+  setInterval(() => { if (S && S.state === 'playing' && S.you && S.you.role === 'impostor') { renderPeople(); if (!$('#panel-kill').hidden) renderKill(); } }, 1000);
   // heartbeat so the server can tell a closed tunnel from a live phone
   // Heartbeat. Chrome and Safari both throttle timers in a backgrounded tab,
   // and the server reaps a player after 90 s of silence - which is what ended

@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>House Impostor</title>
-<link rel="stylesheet" href="style.css?v=ui21">
+<link rel="stylesheet" href="style.css?v=ui22">
 </head>
 <body>
 
 <!-- join -->
 <section id="scr-join" class="screen">
-  <div class="hero"><img src="img-hero-art.jpg?v=ui21" alt="Crewmates" width="960" height="620"></div>
+  <div class="hero"><img src="img-hero-art.jpg?v=ui22" alt="Crewmates" width="960" height="620"></div>
   <div id="floaters" aria-hidden="true"></div>
   <div class="card">
     <h1>House<br><span>Impostor</span></h1>
@@ -44,6 +44,12 @@
   <div id="lobby-crew" class="lobby-crew" hidden></div>
   <div id="floorplan"></div>
 
+  <div id="panel-kill" class="card" hidden>
+    <h2>Kill</h2>
+    <div id="kill-list"></div>
+    <p class="sub">Kill is only possible in the room you are standing in.</p>
+  </div>
+
   <div id="panel-people" class="card">
     <h2>In your room</h2>
     <div id="people"></div>
@@ -59,6 +65,7 @@
     <div class="btnrow">
       <button id="btn-report" class="danger">Report body</button>
       <button id="btn-emergency" class="danger">Emergency</button>
+      <button id="btn-kill" class="danger" hidden>Kill</button>
       <button id="btn-ble" class="ghost">Pair my beacons</button>
       <button id="btn-scan" class="ghost">Auto-detect room (scan)</button>
     </div>
@@ -129,7 +136,7 @@
 
 <div id="toast"></div>
 
-<script src="config.js?v=ui21"></script>
-<script src="app.js?v=ui21"></script>
+<script src="config.js?v=ui22"></script>
+<script src="app.js?v=ui22"></script>
 </body>
 </html>
