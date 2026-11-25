@@ -461,7 +461,10 @@ function assignTasks(room) {
       [pick[i], pick[j]] = [pick[j], pick[i]];
     }
     p.tasks = pick.slice(0, Math.min(RULES.TASKS_PER_PLAYER, pick.length))
-      .map((t) => ({ id: t.tid, name: t.name, room: t.room, kind: t.kind === 'long' ? 'long' : 'short', done: false }));
+      .map((t) => ({
+        id: t.tid, name: t.name, room: t.room, game: t.game || 'hold',
+        kind: t.kind === 'long' ? 'long' : 'short', done: false,
+      }));
     p.hold = null;
   }
   return true;
@@ -469,6 +472,16 @@ function assignTasks(room) {
 
 /* How long a task's button must be held. */
 const holdSeconds = (task) => (task.kind === 'long' ? RULES.TASK_HOLD_LONG_S : RULES.TASK_HOLD_S);
+
+/* Every task is a mini-game on the phone (like the real game - nothing to do
+ * with the furniture). The phone runs the game and reports when it is finished;
+ * the server only checks it was opened in the right room and was up long
+ * enough that it cannot have been tapped through. */
+const GAME_MIN_S = {
+  swipe: 3, keys: 4, wires: 4, align: 4, leaves: 4, hexes: 4, keypad: 6,
+  asteroids: 8, sample: 6, fuel: 5, upload: 6, scan: 10,
+};
+const gameMinSeconds = (task) => GAME_MIN_S[task.game] || holdSeconds(task);
 
 function taskProgress(room) {
   const crew = crewAlive(room).concat([...room.players.values()].filter((p) => p.joined && !p.alive && p.role === 'crew'));
@@ -683,8 +696,9 @@ function handleMsg(room, p, msg) {
       if (!task || p.hold.id !== task.id) return;
       const held = (Date.now() - p.hold.at) / 1000;
       p.hold = null;
-      if (task.room !== p.room) { p.conn.send({ t: 'nope', text: 'You left the room - hold it there.' }); return; }
-      if (held + 0.4 < holdSeconds(task)) { p.conn.send({ t: 'nope', text: `Hold the button for ${holdSeconds(task)}s, actually doing the chore.` }); return; }
+      if (task.room !== p.room) { p.conn.send({ t: 'nope', text: 'You left the room - open it again there.' }); return; }
+      const need = gameMinSeconds(task);
+      if (held + 0.4 < need) { p.conn.send({ t: 'nope', text: `Too quick - give it ${need}s.` }); return; }
       task.done = true;
       // No "(faked?)" tag: the feed is public, and a tag on every impostor task
       // hands their role away the moment they fake one.
@@ -1021,8 +1035,8 @@ setInterval(() => {
         if (!p.joined || p.director || !p.alive) continue;
         if (p.hold) {
           const task = (p.tasks || []).find((x) => x.id === p.hold.id && !x.done);
-          if (!task || now - p.hold.at > holdSeconds(task) * 1000 + 60000) p.hold = null;
-          else if (task.room === p.room && (now - p.hold.at) / 1000 >= holdSeconds(task)) {
+          if (!task || now - p.hold.at > gameMinSeconds(task) * 1000 + 120000) p.hold = null;
+          else if (task.room === p.room && (now - p.hold.at) / 1000 >= gameMinSeconds(task)) {
             task.done = true; p.hold = null;
             // No "(faked?)" tag: the feed is public, and a tag on every impostor task
       // hands their role away the moment they fake one.

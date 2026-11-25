@@ -5,7 +5,7 @@
 const $ = (s) => document.querySelector(s);
 const CFG = window.CFG || {};
 let ws = null, me = null, S = null;   // S = last server snapshot
-let holdTimer = null, holdTask = null, holdAt = 0, meetingSounded = false;
+let holdTimer = null, holdTask = null, holdAt = 0, meetingSounded = false, lastAutoRoom = null, autoTaskId = null;
 let reconnectDelay = 800;
 
 /* ------------------------------------------------------------------ toast */
@@ -125,7 +125,11 @@ function onMsg(m) {
       if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
       blip('kill');
       break;
-    case 'nope': toast(m.text, 'bad'); break;
+    case 'nope':
+      toast(m.text, 'bad');
+      // a refused task (left the room, too quick) closes the pop-up
+      if (taskOpen && /room|quick/i.test(m.text)) closeTask();
+      break;
     case 'ok': break;
   }
 }
@@ -230,6 +234,19 @@ function render() {
   if (S.state !== 'meeting') meetingSounded = false;
 
   maybeReveal();
+  // Walking into a room with an unfinished task pops it up by itself.
+  if (S.state === 'playing' && you.alive && !me.director
+      && !taskOpen && !autoTaskId && you.room && you.room !== lastAutoRoom) {
+    lastAutoRoom = you.room;
+    const t = (you.tasks || []).find((x) => !x.done && x.room === you.room);
+    if (t) {
+      autoTaskId = t.id;
+      setTimeout(() => {
+        if (!taskOpen && S && S.you && S.you.room === t.room) openTask(t.id);
+        autoTaskId = null;
+      }, 400);
+    }
+  }
 
   $('#scr-meeting').hidden = S.state !== 'meeting';
   if (S.state === 'meeting') renderMeeting();
@@ -327,40 +344,228 @@ function renderTasks() {
   const you = S.you || {};
   const list = you.tasks || [];
   $('#panel-tasks').hidden = !(list.length && S.state === 'playing' && you.alive);
-  const holdFor = (t) => (t.kind === 'long' ? (window.RULES ? RULES.TASK_HOLD_LONG_S : 12) : (window.RULES ? RULES.TASK_HOLD_S : 5));
-  $('#holdhint').textContent = 'hold the button, in the room';
-  $('#tasks').innerHTML = list.map((t) => `
-    <div class="task ${t.done ? 'done' : ''}">
+  $('#holdhint').textContent = 'tap a task in its room';
+  $('#tasks').innerHTML = list.map((t) => {
+    const inRoom = t.room === you.room;
+    return `<div class="task ${t.done ? 'done' : ''}">
       <span class="nm">${esc(t.name)} <span class="sub">@ ${esc(roomName(t.room))}</span>
         <span class="pill ${t.kind === 'long' ? 'long' : ''}">${t.kind === 'long' ? 'long' : 'short'}</span></span>
-      ${t.done ? '<span>✔</span>' : `<button data-hold="${t.id}">Hold</button>`}
-    </div>`).join('');
-  $('#tasks').querySelectorAll('[data-hold]').forEach((b) => {
-    const id = b.dataset.hold;
-    const start = (e) => {
-      e.preventDefault();
-      if (holdTask) return;
-      holdTask = id; holdAt = Date.now();
-      b.classList.add('holding');
-      send({ t: 'taskStart', id });
-      holdTimer = setInterval(() => {
-        const left = Math.max(0, holdFor(t) - (Date.now() - holdAt) / 1000);
-        b.textContent = left.toFixed(1) + 's';
-      }, 100);
+      ${t.done ? '<span>✔</span>' : `<button data-open="${t.id}" ${inRoom ? '' : 'disabled'}>${inRoom ? 'Open' : 'Go there'}</button>`}
+    </div>`;
+  }).join('');
+  $('#tasks').querySelectorAll('[data-open]').forEach((b) =>
+    b.addEventListener('click', () => openTask(b.dataset.open)));
+}
+
+/* ------------------------------------------------------------------ tasks
+ * Every task is a mini-game in a pop-up, like the real game: the room's
+ * furniture is irrelevant, the screen is the task. The server checks the room
+ * and a minimum time; the phone only reports "finished". */
+let taskOpen = null;   // { task, at, done }
+
+function openTask(id) {
+  const t = (S.you.tasks || []).find((x) => x.id === id);
+  if (!t || t.done) return;
+  if (t.room !== (S.you.room || '')) { toast(`That task is in the ${roomName(t.room)} - go there first.`, 'bad'); return; }
+  if (taskOpen) return;
+  taskOpen = { task: t, at: Date.now(), done: false };
+  send({ t: 'taskStart', id });
+  $('#tg-title').textContent = t.name;
+  $('#tg-room').textContent = roomName(t.room);
+  $('#tg-body').innerHTML = '';
+  $('#tg-msg').textContent = '';
+  $('#taskgame').hidden = false;
+  const min = (t.kind === 'long' ? 8 : 4);
+  $('#tg-time').textContent = min + 's';
+  buildGame(t.game || 'hold', $('#tg-body'), () => finishTask());
+}
+
+function closeTask() {
+  taskOpen = null;
+  $('#taskgame').hidden = true;
+}
+
+function finishTask() {
+  if (!taskOpen || taskOpen.done) return;
+  const elapsed = (Date.now() - taskOpen.at) / 1000;
+  const need = taskOpen.task.kind === 'long' ? 8 : 4;
+  if (elapsed + 0.4 < need) {
+    $('#tg-msg').textContent = `Too quick - keep it open ${Math.ceil(need - elapsed)}s more.`;
+    setTimeout(() => { if (taskOpen) finishTask(); }, Math.ceil((need - elapsed) * 1000) + 100);
+    return;
+  }
+  taskOpen.done = true;
+  send({ t: 'taskDone', id: taskOpen.task.id });
+  $('#tg-msg').textContent = 'Done.';
+  setTimeout(closeTask, 700);
+}
+
+const rnd = (n) => Math.floor(Math.random() * n);
+const shuffle = (a) => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = rnd(i + 1); [b[i], b[j]] = [b[j], b[i]]; } return b; };
+
+/* One builder per mini-game. `done()` is the only way out. */
+function buildGame(game, el, done) {
+  if (game === 'swipe') {
+    el.innerHTML = '<div class="card-slot"></div><p class="sub">drag the card across the reader</p>'
+      + '<div class="swipe-track"><div class="swipe-card">ID</div></div>';
+    const card = el.querySelector('.swipe-card'), track = el.querySelector('.swipe-track');
+    let drag = false, x0 = 0;
+    const move = (e) => {
+      if (!drag) return;
+      const x = Math.max(0, Math.min(track.clientWidth - card.clientWidth, (e.touches ? e.touches[0].clientX : e.clientX) - x0));
+      card.style.transform = `translateX(${x}px)`;
+      if (x > track.clientWidth - card.clientWidth - 8) { drag = false; done(); }
     };
-    const stop = () => {
-      if (holdTask !== id) return;
-      clearInterval(holdTimer);
-      b.classList.remove('holding');
-      b.textContent = 'Hold';
-      holdTask = null;
-      send({ t: 'taskDone', id });
-    };
-    b.addEventListener('pointerdown', start);
-    b.addEventListener('pointerup', stop);
-    b.addEventListener('pointercancel', stop);
-    b.addEventListener('pointerleave', stop);
-  });
+    card.addEventListener('pointerdown', (e) => { drag = true; x0 = e.clientX - (card._x || 0); });
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', () => { drag = false; });
+    return;
+  }
+  if (game === 'keys') {
+    const nums = shuffle([1,2,3,4,5,6,7,8,9]).slice(0, 9);
+    el.innerHTML = '<p class="sub">tap 1 to 9 in order</p><div class="keygrid"></div>';
+    const grid = el.querySelector('.keygrid'); let next = 1;
+    nums.forEach((n) => {
+      const b = document.createElement('button'); b.textContent = n;
+      b.addEventListener('click', () => {
+        if (n !== next) { next = 1; el.querySelectorAll('.keygrid button').forEach((x) => x.classList.remove('ok')); return; }
+        b.classList.add('ok'); b.disabled = true; next++;
+        if (next > 9) done();
+      });
+      grid.appendChild(b);
+    });
+    return;
+  }
+  if (game === 'wires') {
+    const cols = shuffle(['#ff4d5e','#38bdf8','#ffd23f','#4ade80']);
+    el.innerHTML = '<p class="sub">drag each wire to its colour</p><div class="wires"><div class="wcol">'
+      + cols.map((c) => `<div class="wnode" style="--c:${c}"></div>`).join('')
+      + '</div><div class="wcol">' + shuffle(cols).map((c) => `<div class="wnode" data-c="${c}" style="--c:${c}"></div>`).join('') + '</div></div>';
+    const nodes = [...el.querySelectorAll('.wcol')[1].children];
+    let picked = null;
+    el.querySelectorAll('.wcol')[0].children.forEach((n, i) => n.addEventListener('click', () => { picked = n; el.querySelectorAll('.wnode').forEach((x) => x.classList.remove('sel')); n.classList.add('sel'); }));
+    nodes.forEach((n) => n.addEventListener('click', () => {
+      if (!picked) return;
+      if (picked.style.getPropertyValue('--c') === n.dataset.c) { picked.classList.add('ok'); n.classList.add('ok'); picked = null; if (el.querySelectorAll('.wnode.ok').length >= 8) done(); }
+      else { picked.classList.remove('sel'); picked = null; }
+    }));
+    return;
+  }
+  if (game === 'align') {
+    el.innerHTML = '<p class="sub">line the bar up with the notch, then lock it</p><div class="align-track"><div class="align-notch"></div><div class="align-bar"></div></div><button class="big">Lock</button>';
+    const bar = el.querySelector('.align-bar'), notch = el.querySelector('.align-notch');
+    let pos = 0, dir = 1;
+    const target = 30 + rnd(40);
+    notch.style.left = target + '%';
+    const iv = setInterval(() => {
+      if (!taskOpen) return clearInterval(iv);
+      pos += dir * 1.6; if (pos > 94 || pos < 0) dir *= -1;
+      bar.style.left = pos + '%';
+      if (Math.abs(pos - target) < 3) bar.classList.add('near'); else bar.classList.remove('near');
+    }, 16);
+    el.querySelector('button').addEventListener('click', () => {
+      if (Math.abs(pos - target) < 6) { clearInterval(iv); done(); }
+      else { el.querySelector('button').textContent = 'Missed - try again'; }
+    });
+    return;
+  }
+  if (game === 'leaves') {
+    el.innerHTML = '<p class="sub">drag every leaf into the chute</p><div class="leafpad"></div><div class="chute">chute</div>';
+    const pad = el.querySelector('.leafpad'), chute = el.querySelector('.chute');
+    let left = 6;
+    for (let i = 0; i < 6; i++) {
+      const l = document.createElement('span'); l.className = 'leaf'; l.textContent = '🍃';
+      l.style.left = (5 + rnd(80)) + '%'; l.style.top = (5 + rnd(70)) + '%';
+      l.addEventListener('click', () => { l.remove(); if (--left === 0) done(); });
+      pad.appendChild(l);
+    }
+    return;
+  }
+  if (game === 'hexes') {
+    el.innerHTML = '<p class="sub">press every red hexagon</p><div class="hexgrid"></div>';
+    const g = el.querySelector('.hexgrid'); let left = 7;
+    for (let i = 0; i < 12; i++) {
+      const h = document.createElement('span'); h.className = 'hex' + (i < 7 ? ' red' : '');
+      if (i < 7) h.addEventListener('click', () => { h.classList.add('ok'); if (--left === 0) done(); });
+      g.appendChild(h);
+    }
+    return;
+  }
+  if (game === 'keypad') {
+    el.innerHTML = '<p class="sub">watch the sequence, then repeat it</p><div class="seq"></div><div class="keygrid pad"></div>';
+    const seq = Array.from({ length: 5 }, () => rnd(4));
+    const shown = el.querySelector('.seq'); let step = 0, live = false;
+    const btns = ['▲','▼','◀','▶'].map((c, i) => { const b = document.createElement('button'); b.textContent = c; b.addEventListener('click', () => {
+      if (!live) return;
+      if (i === seq[step]) { step++; if (step === seq.length) { live = false; done(); } }
+      else { step = 0; shown.textContent = 'wrong - watch again'; live = false; setTimeout(play, 900); }
+    }); el.querySelector('.keygrid').appendChild(b); return b; });
+    function play() {
+      step = 0; let i = 0;
+      const t = setInterval(() => {
+        if (i >= seq.length) { clearInterval(t); live = true; shown.textContent = 'your turn'; return; }
+        btns[seq[i]].classList.add('lit'); shown.textContent = 'watch...';
+        setTimeout(() => btns[seq[i]].classList.remove('lit'), 320); i++;
+      }, 520);
+    }
+    setTimeout(play, 400);
+    return;
+  }
+  if (game === 'asteroids') {
+    el.innerHTML = '<p class="sub">tap 10 asteroids</p><div class="sky"></div>';
+    const sky = el.querySelector('.sky'); let left = 10;
+    const iv = setInterval(() => {
+      if (!taskOpen) return clearInterval(iv);
+      if (sky.children.length > 14) return;
+      const a = document.createElement('span'); a.className = 'rock'; a.textContent = '☄';
+      a.style.left = (2 + rnd(84)) + '%'; a.style.top = (2 + rnd(80)) + '%';
+      a.addEventListener('click', () => { a.remove(); if (--left === 0) { clearInterval(iv); done(); } });
+      sky.appendChild(a);
+    }, 260);
+    return;
+  }
+  if (game === 'sample') {
+    el.innerHTML = '<p class="sub">fill the tubes, then press the green button</p><div class="tubes"></div><button class="big" disabled>Green</button>';
+    const tubes = el.querySelector('.tubes'), btn = el.querySelector('button');
+    for (let i = 0; i < 5; i++) { const t = document.createElement('span'); t.className = 'tube'; tubes.appendChild(t); }
+    let n = 0;
+    const iv = setInterval(() => {
+      if (!taskOpen) return clearInterval(iv);
+      if (n >= 5) { clearInterval(iv); btn.disabled = false; return; }
+      tubes.children[n].classList.add('full'); n++;
+    }, 700);
+    btn.addEventListener('click', () => { if (!btn.disabled) done(); });
+    return;
+  }
+  if (game === 'fuel') {
+    el.innerHTML = '<p class="sub">hold the lever until the tank is full</p><div class="tank"><div class="fill"></div></div><button class="big">Hold</button>';
+    const fill = el.querySelector('.fill'), b = el.querySelector('button');
+    let pct = 0, iv = null;
+    const stop = () => { clearInterval(iv); iv = null; };
+    b.addEventListener('pointerdown', () => {
+      if (iv) return;
+      iv = setInterval(() => { pct = Math.min(100, pct + 3); fill.style.height = pct + '%'; if (pct >= 100) { stop(); done(); } }, 60);
+    });
+    b.addEventListener('pointerup', stop); b.addEventListener('pointerleave', stop);
+    return;
+  }
+  if (game === 'upload') {
+    el.innerHTML = '<p class="sub">stand still while the data uploads</p><div class="bar"><div class="prog"></div></div>';
+    const prog = el.querySelector('.prog'); let pct = 0;
+    const iv = setInterval(() => { if (!taskOpen) return clearInterval(iv); pct += 2; prog.style.width = pct + '%'; if (pct >= 100) { clearInterval(iv); done(); } }, 80);
+    return;
+  }
+  if (game === 'scan') {
+    el.innerHTML = '<p class="sub">stand still in the scanner</p><div class="scanner"><div class="beam"></div><span class="crew big" id="scancrew"></span></div>';
+    $('#scancrew').style.setProperty('--c', myColor);
+    setTimeout(() => { if (taskOpen) done(); }, 9000);
+    return;
+  }
+  // fallback: the old hold button
+  el.innerHTML = '<p class="sub">hold to finish</p><button class="big">Hold</button>';
+  const b = el.querySelector('button'); let iv = null;
+  b.addEventListener('pointerdown', () => { iv = setTimeout(done, 3000); });
+  b.addEventListener('pointerup', () => { if (iv) clearTimeout(iv); });
 }
 
 function renderMeeting() {
@@ -890,6 +1095,7 @@ window.addEventListener('DOMContentLoaded', () => {
     $('#btn-menu').setAttribute('aria-expanded', 'false');
   });
   $('#btn-leave').addEventListener('click', leaveGame);
+  $('#tg-close').addEventListener('click', closeTask);
   $('#btn-copy').addEventListener('click', async () => {
     const url = `${location.origin}/?room=${encodeURIComponent(($('#h-code').textContent || '').trim())}`;
     try { await navigator.clipboard.writeText(url); toast('Invite link copied.'); }

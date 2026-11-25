@@ -159,134 +159,136 @@
   "_tasks": "Chores, honestly done, in the room listed. Each player gets 4 at random from the rooms of the chosen level. The hold button only counts while the server believes you are in that room.",
   "tasks": [
     {
-      "room": "bed1",
-      "name": "Fluff every pillow in this room",
-      "kind": "short"
-    },
-    {
-      "room": "bed1",
-      "name": "Fold one item of clothing and put it away",
-      "kind": "short"
-    },
-    {
-      "room": "bed2",
-      "name": "Make one bed properly",
-      "kind": "short"
-    },
-    {
-      "room": "bed2",
-      "name": "Line up the shoes by the door of this room",
+      "room": "bath",
+      "name": "Wipe the mirror clean",
+      "game": "swipe",
       "kind": "short"
     },
     {
       "room": "bath",
-      "name": "Wipe one patch of the mirror",
+      "name": "Clean the O2 filter",
+      "game": "leaves",
       "kind": "short"
     },
     {
       "room": "bath",
-      "name": "Fold a towel into thirds and stack it",
-      "kind": "short"
-    },
-    {
-      "room": "down",
-      "name": "Load one dish into the dishwasher",
-      "kind": "short"
-    },
-    {
-      "room": "down",
-      "name": "Wipe one section of the table",
-      "kind": "short"
-    },
-    {
-      "room": "down",
-      "name": "Put the TV remote back on its spot",
-      "kind": "short"
-    },
-    {
-      "room": "down",
-      "name": "Turn off one lamp that is on (or switch one on)",
-      "kind": "short"
-    },
-    {
-      "room": "base1",
-      "name": "Stack anything stackable in this room",
-      "kind": "short"
-    },
-    {
-      "room": "base2",
-      "name": "Find one labelled item and put it where it belongs",
-      "kind": "short"
-    },
-    {
-      "room": "bed1",
-      "name": "Straighten the things on the nightstand",
-      "kind": "short"
-    },
-    {
-      "room": "bed2",
-      "name": "Open the curtains and shut them again",
-      "kind": "short"
-    },
-    {
-      "room": "bath",
-      "name": "Put the toothbrushes back in the cup",
-      "kind": "short"
-    },
-    {
-      "room": "down",
-      "name": "Straighten the cushions on the sofa",
-      "kind": "short"
-    },
-    {
-      "room": "base1",
-      "name": "Line up the tins on the shelf",
-      "kind": "short"
-    },
-    {
-      "room": "base2",
-      "name": "Match two pairs of socks",
-      "kind": "short"
-    },
-    {
-      "room": "room",
-      "name": "Clear one surface completely",
-      "kind": "short"
-    },
-    {
-      "room": "room2",
-      "name": "Wipe one countertop section",
-      "kind": "short"
-    },
-    {
-      "room": "bed1",
-      "name": "Strip and remake one bed",
+      "name": "Inspect the sample",
+      "game": "sample",
       "kind": "long"
     },
     {
       "room": "bath",
-      "name": "Clean the whole mirror properly",
-      "kind": "long"
-    },
-    {
-      "room": "down",
-      "name": "Wash and dry one sinkful of dishes",
+      "name": "Submit to the scanner",
+      "game": "scan",
       "kind": "long"
     },
     {
       "room": "room",
-      "name": "Tidy the whole living room table",
+      "name": "Empty the garbage chute",
+      "game": "fuel",
+      "kind": "long"
+    },
+    {
+      "room": "room",
+      "name": "Put the dishes away",
+      "game": "asteroids",
+      "kind": "long"
+    },
+    {
+      "room": "room",
+      "name": "Sort the shelf into order",
+      "game": "hexes",
+      "kind": "short"
+    },
+    {
+      "room": "room2",
+      "name": "Put away everything on the counter",
+      "game": "fuel",
       "kind": "long"
     },
     {
       "room": "room2",
-      "name": "Put away everything left on the counter",
+      "name": "Calibrate the distributor",
+      "game": "align",
+      "kind": "short"
+    },
+    {
+      "room": "room2",
+      "name": "Unlock the manifolds",
+      "game": "keys",
+      "kind": "short"
+    },
+    {
+      "room": "down",
+      "name": "Fix the wiring",
+      "game": "wires",
+      "kind": "short"
+    },
+    {
+      "room": "down",
+      "name": "Align the engine output",
+      "game": "align",
+      "kind": "short"
+    },
+    {
+      "room": "down",
+      "name": "Prime the shields",
+      "game": "hexes",
+      "kind": "short"
+    },
+    {
+      "room": "down",
+      "name": "Chart the course",
+      "game": "keypad",
+      "kind": "short"
+    },
+    {
+      "room": "bed1",
+      "name": "Swipe your card",
+      "game": "swipe",
+      "kind": "short"
+    },
+    {
+      "room": "bed1",
+      "name": "Unlock the manifolds",
+      "game": "keys",
+      "kind": "short"
+    },
+    {
+      "room": "bed2",
+      "name": "Fix the wiring",
+      "game": "wires",
+      "kind": "short"
+    },
+    {
+      "room": "bed2",
+      "name": "Upload the data",
+      "game": "upload",
       "kind": "long"
     },
     {
       "room": "base1",
-      "name": "Sort the whole shelf into order",
+      "name": "Clear the asteroids",
+      "game": "asteroids",
       "kind": "long"
+    },
+    {
+      "room": "base1",
+      "name": "Start the reactor",
+      "game": "keypad",
+      "kind": "short"
+    },
+    {
+      "room": "base2",
+      "name": "Divert the power",
+      "game": "align",
+      "kind": "short"
+    },
+    {
+      "room": "base2",
+      "name": "Clean the vent",
+      "game": "leaves",
+      "kind": "short"
     }
   ],
   "beacons": [],

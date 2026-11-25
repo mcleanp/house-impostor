@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>House Impostor</title>
-<link rel="stylesheet" href="style.css?v=ui12">
+<link rel="stylesheet" href="style.css?v=ui13">
 </head>
 <body>
 
 <!-- join -->
 <section id="scr-join" class="screen">
-  <div class="hero"><img src="img-hero-art.jpg?v=ui12" alt="Crewmates" width="960" height="620"></div>
+  <div class="hero"><img src="img-hero-art.jpg?v=ui13" alt="Crewmates" width="960" height="620"></div>
   <div id="floaters" aria-hidden="true"></div>
   <div class="card">
     <h1>House<br><span>Impostor</span></h1>
@@ -110,9 +110,20 @@
   <div class="tap">tap to begin</div>
 </div>
 
+<!-- task mini-game pop-up -->
+<div id="taskgame" class="overlay" hidden>
+  <div class="card tg">
+    <h2 id="tg-title"></h2>
+    <p class="sub"><span id="tg-room"></span> · min <b id="tg-time"></b></p>
+    <div id="tg-body"></div>
+    <p id="tg-msg" class="warn"></p>
+    <button id="tg-close" class="ghost">Leave task</button>
+  </div>
+</div>
+
 <div id="toast"></div>
 
-<script src="config.js?v=ui12"></script>
-<script src="app.js?v=ui12"></script>
+<script src="config.js?v=ui13"></script>
+<script src="app.js?v=ui13"></script>
 </body>
 </html>
