@@ -589,6 +589,7 @@ function startMeeting(room, reason) {
 /* A living crew member is standing in a room with a body: that IS the report,
  * no button. Caller must have checked state/alive. */
 function bodyFound(room, p) {
+  if (p.role !== 'crew') return false;   // the impostor does not report their own kill
   const body = room.bodies.find((b) => b.room === p.room);
   if (!body) return false;
   const v = room.players.get(body.victimId);
