@@ -216,7 +216,11 @@ function normaliseHouse(h) {
   // Host settings that survive a save. Bounded here so a hand-edited file
   // cannot set a silly meeting length.
   const ms = Math.round(Number((h.settings || {}).meetingS));
-  h.settings = { meetingS: Number.isFinite(ms) ? Math.min(300, Math.max(15, ms)) : RULES.MEETING_S };
+  const em = Math.round(Number((h.settings || {}).emergencyPerCrew));
+  h.settings = {
+    meetingS: Number.isFinite(ms) ? Math.min(300, Math.max(15, ms)) : RULES.MEETING_S,
+    emergencyPerCrew: Number.isFinite(em) ? Math.min(5, Math.max(0, em)) : 1,
+  };
   // The lobby is the "out" area: dead players walk there. Not part of the
   // movement graph, never a task room, always present.
   if (!h.rooms.find((r) => r.id === 'lobby')) {
@@ -371,6 +375,7 @@ function reresolveLive() {
         // label flickers off and back on while standing still.
         pl.room = null; pl.roomSource = null; dirty = true;
       }
+      if (room.state === 'playing' && pl.alive && bodyFound(room, pl)) { dirty = true; break; }
     }
     // checkWin ends the round when no impostors are alive; in the lobby it
     // would wrongly flip the game to 'over', so only run it mid-round.
@@ -399,7 +404,7 @@ function makeRoom(code) {
     state: 'lobby',            // lobby | playing | meeting | over
     levelId: 'house',
     startedAt: 0, killReadyAt: 0, meetingEnds: 0,
-    votes: new Map(), emergencyUsed: new Set(), bodies: [],   // bodies: [{room, victimId}]
+    votes: new Map(), emergencyUsed: new Map(), bodies: [],   // bodies: [{room, victimId}]; emergencyUsed: id -> count
     events: [], overSent: false,
   };
   rooms.set(code, room);
@@ -561,6 +566,12 @@ function killPlayer(room, killer, victimId) {
 
 /* Meeting length: the host's setting if they made one, else the default.
  * Bounded so a typo cannot open a 40-minute meeting. */
+/* How many emergency buttons each crew member gets per round. */
+function emergencyAllowance() {
+  const n = Math.round(Number((HOUSE.settings || {}).emergencyPerCrew));
+  return Number.isFinite(n) && n >= 0 && n <= 5 ? n : 1;
+}
+
 function meetingSeconds() {
   const n = Math.round(Number((HOUSE.settings || {}).meetingS));
   return Number.isFinite(n) && n >= 15 && n <= 300 ? n : RULES.MEETING_S;
@@ -572,6 +583,16 @@ function startMeeting(room, reason) {
   room.votes.clear();
   room.killReadyAt = Date.now() + RULES.POST_MEETING_COOLDOWN_S * 1000;
   roomEvent(room, { type: 'meeting', text: reason });
+  return true;
+}
+
+/* A living crew member is standing in a room with a body: that IS the report,
+ * no button. Caller must have checked state/alive. */
+function bodyFound(room, p) {
+  const body = room.bodies.find((b) => b.room === p.room);
+  if (!body) return false;
+  const v = room.players.get(body.victimId);
+  startMeeting(room, `${v ? v.name : 'A body'} was found dead by ${p.name} in the ${roomById(p.room).name}.`);
   return true;
 }
 
@@ -660,7 +681,8 @@ function snapshotFor(room, p) {
       roomSource: p.roomSource,
       beaconRoom: resolveRoom(p.id),
       moveTo: p.alive ? neighbours(p.room).filter((id) => levelRooms(room).has(id)) : [],
-      emergencyLeft: room.state === 'playing' && p.alive && !room.emergencyUsed.has(p.id),
+      emergencyLeft: room.state === 'playing' && p.alive
+        ? Math.max(0, emergencyAllowance() - (room.emergencyUsed.get(p.id) || 0)) : 0,
     },
     people: visible.map((q) => ({
       id: q.id, name: q.name, room: q.room, color: q.color,
@@ -728,18 +750,11 @@ function handleMsg(room, p, msg) {
       else { broadcastState(room); checkWin(room); }
       break;
     }
-    case 'report': {
-      if (room.state !== 'playing' || !p.alive) return;
-      const body = room.bodies.find((b) => b.room === p.room);
-      if (!body) { p.conn.send({ t: 'nope', text: 'Nothing to report in your room.' }); return; }
-      startMeeting(room, `${p.name} reported a body in the ${roomById(p.room).name}.`);
-      broadcastState(room);
-      break;
-    }
     case 'emergency': {
       if (room.state !== 'playing' || !p.alive) return;
-      if (room.emergencyUsed.has(p.id)) { p.conn.send({ t: 'nope', text: 'You already used your emergency button.' }); return; }
-      room.emergencyUsed.add(p.id);
+      const used = room.emergencyUsed.get(p.id) || 0;
+      if (used >= emergencyAllowance()) { p.conn.send({ t: 'nope', text: 'You already used your emergency button.' }); return; }
+      room.emergencyUsed.set(p.id, used + 1);
       startMeeting(room, `${p.name} called an emergency meeting.`);
       broadcastState(room);
       break;
@@ -1089,6 +1104,9 @@ setInterval(() => {
         // Beacon evidence trumps a tap, always.
         const best = resolveRoom(p.id, p.roomSource === 'beacon' ? p.room : null);
         if (best && best !== p.room) { p.room = best; p.roomSource = 'beacon'; p.movedAt = now; dirty = true; }
+        // Walking into a room with a body reports it for you. Checked after the
+        // room update so a beacon-driven arrival counts the same as a tap.
+        if (room.state === 'playing' && p.alive && bodyFound(room, p)) { dirty = true; break; }
       }
     }
     if (room.players.size && (room.state !== 'over' || !room.overSent)) {

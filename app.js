@@ -295,15 +295,14 @@ function render() {
   const canPair = S.state === 'lobby' || S.state === 'over' || playing;
   // Directors never use beacons, so the whole BLE panel is noise for them.
   $('#panel-actions').hidden = me.director ? true : !canPair;
-  $('#btn-report').hidden = !playing;
   // Only an impostor, only mid-round, and only while alive.
   const canKill = playing && you.role === 'impostor';
   $('#btn-kill').hidden = !canKill;
   if (!canKill) $('#panel-kill').hidden = true;
   if (canKill && !$('#panel-kill').hidden) renderKill();
   $('#btn-emergency').hidden = !playing;
-  $('#btn-report').disabled = !(S.bodies || []).some((b) => b.room === you.room);
   $('#btn-emergency').disabled = !you.emergencyLeft;
+  $('#btn-emergency').textContent = you.emergencyLeft > 1 ? `Emergency (${you.emergencyLeft})` : 'Emergency';
 }
 
 function renderFloorplan() {
@@ -763,6 +762,7 @@ function buildHouseEditor() {
       '<h2>Doors</h2><div id="he-doors"></div>' +
       '<div class="he-task"><select id="he-da"></select><span class="sub">↔</span><select id="he-db"></select><button id="he-adddoor" class="ghost">+ door</button></div>' +
       '<h2>Settings</h2><label>Meeting / voting time (seconds, 15-300)</label><input id="he-meeting" type="number" min="15" max="300" step="5">' +
+      '<label>Emergency calls per crew member, per round (0-5)</label><input id="he-emergency" type="number" min="0" max="5" step="1">' +
       '<h2>Tasks</h2><div id="he-tasks"></div><button id="he-add" class="ghost">+ task</button>';
 
     const drawAll = () => { drawFloors(); drawRooms(); drawDoors(); drawTasks(); drawSettings(); };
@@ -775,6 +775,13 @@ function buildHouseEditor() {
         const n = Math.round(Number(inp.value));
         h.settings.meetingS = Number.isFinite(n) ? Math.min(300, Math.max(15, n)) : 60;
         inp.value = h.settings.meetingS;
+      });
+      const em = $('#he-emergency');
+      em.value = h.settings.emergencyPerCrew ?? 1;
+      em.addEventListener('change', () => {
+        const n = Math.round(Number(em.value));
+        h.settings.emergencyPerCrew = Number.isFinite(n) ? Math.min(5, Math.max(0, n)) : 1;
+        em.value = h.settings.emergencyPerCrew;
       });
     };
 
@@ -1007,6 +1014,20 @@ function diag(o) {
 // Arm once (needs a user gesture): attach the advertisement listener and start
 // watching. From then on we just re-report what we hear on a timer - no more
 // choosers. The phone never connects to a beacon.
+/* Chrome on Android only: the board picker MUST be opened inside the tap.
+ * joinGame() awaits /api/current before the socket even exists, so by the time
+ * the welcome frame arms the scan the gesture is gone (SecurityError). So the
+ * click calls this synchronously; armScan() then awaits the same promise. */
+let pickPromise = null;
+function pickDevice() {
+  if (pickPromise || !navigator.bluetooth || !navigator.bluetooth.requestDevice) return;
+  if (navigator.bluetooth.requestLEScan || navigator.bluetooth.watchAdvertisements) return;
+  try {
+    pickPromise = navigator.bluetooth.requestDevice({ filters: [{ namePrefix: CFG.BLE_PREFIX || 'HB-' }] });
+  } catch (e) { pickPromise = Promise.reject(e); }
+  pickPromise.catch(() => {});   // consumed in armScan; do not warn twice
+}
+
 async function armScan() {
   const st = $('#ble-status');
   if (!navigator.bluetooth) { st.textContent = 'No Web Bluetooth here. iPhone: turn on the free "beacio" Safari extension. Android Chrome: allow Nearby devices + Location (steps on the join screen).'; return; }
@@ -1047,14 +1068,15 @@ async function armScan() {
       if (navigator.bluetooth.requestDevice) {
         try {
           const tPick = Date.now();
-          const d = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: CFG.BLE_PREFIX || 'HB-' }] });
+          const d = await (pickPromise || navigator.bluetooth.requestDevice({ filters: [{ namePrefix: CFG.BLE_PREFIX || 'HB-' }] }));
+          pickPromise = null;
           pickMs = Date.now() - tPick;
           devs.push(d); usedChooser = true;
           if (typeof d.watchAdvertisements === 'function') {
             d.addEventListener('advertisementreceived', onAdvert);
             try { await d.watchAdvertisements(); watching++; } catch (e) { watchErr = (e && e.name) + ':' + (e && e.message); }
           }
-        } catch (e) { pickErr = (e && e.name) + ':' + (e && e.message); }
+        } catch (e) { pickErr = (e && e.name) + ':' + (e && e.message); pickPromise = null; }
       }
       if (navigator.bluetooth.getDevices) {
         try {
@@ -1155,7 +1177,7 @@ function reportNow() {
   reportScan();
 }
 
-function toggleScan() { if (scanArmed) disarmScan(); else armScan(); }
+function toggleScan() { if (scanArmed) disarmScan(); else { pickDevice(); armScan(); } }
 
 /* Chrome on Android has neither global scan API, so arming it means a board
  * picker. Calling that from the Join click as well as from the welcome frame
@@ -1165,6 +1187,7 @@ function toggleScan() { if (scanArmed) disarmScan(); else armScan(); }
 let armAtJoin = false;
 function armForJoin() {
   if ($('#in-director').checked) return;
+  pickDevice();   // synchronous, still inside the tap
   armAtJoin = true;
   armScan().finally(() => { armAtJoin = false; });
 }
@@ -1285,7 +1308,6 @@ window.addEventListener('DOMContentLoaded', () => {
     if (n < 3) toast(`Back in the lobby - you need ${3 - n} more player${3 - n === 1 ? '' : 's'} to start.`, 'bad', 6000);
   });
   $('#btn-takeover').addEventListener('click', () => send({ t: 'host' }));
-  $('#btn-report').addEventListener('click', () => send({ t: 'report' }));
   $('#btn-emergency').addEventListener('click', () => send({ t: 'emergency' }));
   $('#btn-skip').addEventListener('click', () => send({ t: 'vote', target: 'skip' }));
   $('#btn-ble').addEventListener('click', pairBeacon);
