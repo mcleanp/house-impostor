@@ -150,7 +150,7 @@ function onMsg(m) {
     case 'pong': break;
     case 'voted': {
       const who = (S.people || []).find((p) => p.id === m.target);
-      toast(`Vote saved: ${who ? who.name : 'skip'}`);
+      toast(`✔ Your vote is in: ${who ? who.name : 'skip'}`, 'good', 4000);
       break;
     }
     case 'died':
@@ -641,6 +641,20 @@ function renderMeeting() {
     b.textContent = id === mine ? 'Your vote' : (n ? `Vote (${n})` : 'Vote');
     b.disabled = !you.alive;
   });
+
+  // A standalone line saying what this phone has chosen. The row styling alone
+  // was too quiet - it did not read as "you made a choice".
+  const mineEl = $('#m-mine');
+  if (mine) {
+    const who = mine === 'skip' ? null : (S.people || []).find((p) => p.id === mine);
+    mineEl.textContent = `✔ You voted ${mine === 'skip' ? 'to skip' : `for ${who ? who.name : 'someone'}`} - tap another name to change it`;
+    mineEl.hidden = false;
+  } else if (you.alive) {
+    mineEl.textContent = 'Tap a name to cast your vote';
+    mineEl.hidden = false;
+  } else {
+    mineEl.hidden = true;
+  }
 }
 
 function renderOver() {

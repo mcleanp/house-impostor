@@ -306,3 +306,7 @@ details summary{cursor:pointer;color:var(--gold);font-weight:800;text-transform:
 /* your own vote is unmistakable - the red is the same on every row otherwise */
 #vote .person button.mine{background:var(--gold);color:#2b2200;box-shadow:0 5px 0 #a8801a}
 #vote .person button.ghost{background:transparent;color:var(--ink);box-shadow:none;border:2px solid var(--line)}
+
+/* vote confirmation - must read as a decision, not a hint */
+.minevote{background:#3a2f0a;border:2px solid var(--gold);color:#ffe9a3;border-radius:12px;padding:.55rem .7rem;font-weight:800;font-size:.9rem;margin:.5rem 0}
+#toast>div.good{background:#0d3a22;border-color:var(--green);color:#b9f5cf}
