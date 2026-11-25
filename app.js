@@ -142,6 +142,11 @@ function onMsg(m) {
       }
       break;
     case 'state': S = m; render(); break;
+    case 'bye':
+      // The server has a newer socket for this player (another tab, a resume).
+      // Reconnecting now would just close that one - stand down instead.
+      if (ws) { ws.onclose = null; try { ws.close(); } catch {} ws = null; }
+      break;
     case 'pong': break;
     case 'died':
       toast(`You are dead. Walk to the lobby. (${m.room})`, 'bad', 8000);

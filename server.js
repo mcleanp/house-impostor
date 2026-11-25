@@ -977,7 +977,11 @@ server.on('upgrade', (req, socket) => {
   const director = usp.get('director') === '1';
   const color = /^#[0-9a-fA-F]{6}$/.test(String(usp.get('color') || '')) ? String(usp.get('color')).toUpperCase() : null;
   const prev = room.players.get(id);
-  if (prev) { try { prev.conn.close(); } catch {} }   // drop the stale socket for this id
+  // Drop the stale socket for this id - but TELL it first. Without the notice
+  // the old client just sees a close and reconnects with the same pid, which
+  // closes the new socket, which reconnects... a ping-pong every 2 s that also
+  // spams the feed with "rejoined".
+  if (prev) { try { prev.conn.send({ t: 'bye', reason: 'superseded' }); } catch {} try { prev.conn.close(); } catch {} }
   const player = {
     id, name, conn, joined: true, director, color, role: undefined, alive: true,
     room: director ? (HOUSE.rooms.find((r) => !r.lobby) || {}).id : null, roomSource: 'join',
