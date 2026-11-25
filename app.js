@@ -5,7 +5,8 @@
 const $ = (s) => document.querySelector(s);
 const CFG = window.CFG || {};
 let ws = null, me = null, S = null;   // S = last server snapshot
-let resumeRoom = '';   // set at boot; cleared by Leave so a reload stays on the join screen
+let resumeRoom = '';
+let scanTried = false;   // per connection: arm the scan once, never in a loop   // set at boot; cleared by Leave so a reload stays on the join screen
 let holdTimer = null, holdTask = null, holdAt = 0, meetingSounded = false, lastAutoRoom = null, autoTaskId = null;
 let reconnectDelay = 800;
 
@@ -132,7 +133,13 @@ function onMsg(m) {
       // A director only watches: no beacons, no BLE permission, no scanning.
       // armScan() is deliberately NOT called here even for players - Chrome
       // wants it inside a tap, and the Join click already did that.
-      if (!me.director) autoReconnectBeacons();
+      scanTried = false;
+      if (!me.director) {
+        autoReconnectBeacons();
+        // The join click normally arms this; if it did not (resume, director
+        // switched off mid-flight) arm now, once.
+        if (!armAtJoin && !scanArmed && !scanTried) { scanTried = true; armScan(); }
+      }
       break;
     case 'state': S = m; render(); break;
     case 'pong': break;
@@ -289,9 +296,10 @@ function renderFloorplan() {
   fp.innerHTML = '';
   const here = you.room;
   const dir = !!me.director;
-  // A director has no position, so "you are here" would be meaningless - and
-  // you would be the only person in that room, which reads as a bug.
-  const showHere = !dir && !!here;
+  // Directors have no player position, but they still want to see the room
+  // they are standing in, so fall back to the room their beacon resolves to.
+  const hereMark = dir ? (you.beaconRoom || '') : (here || '');
+  const showHere = !!hereMark;
   for (const f of S.house.floors) {
     const rooms = S.house.rooms.filter((r) => r.floor === f.id);
     if (!rooms.length) continue;
@@ -306,7 +314,7 @@ function renderFloorplan() {
       const locked = !dir && you.moveTo && !you.moveTo.includes(r.id) && r.id !== here && !r.lobby && S.state === 'playing';
       // `here` is written from the live snapshot, never from a stale flag, so a
       // room you just left cannot keep the ring.
-      const isHere = showHere && r.id === here;
+      const isHere = showHere && r.id === hereMark;
       return `<div class="room ${isHere ? 'here' : ''} ${locked ? 'locked' : ''}" data-r="${esc(r.id)}"${isHere ? ' aria-current="true"' : ''}>
         <span class="nm">${esc(r.name)}</span>${bodies.length ? '<span class="body">💀</span>' : ''}
         <div class="dots">${dots}</div></div>`;
@@ -631,10 +639,24 @@ function renderSetup() {
   $('#setup-host-only').hidden = isHost;
   $('#btn-takeover').hidden = isHost || S.state !== 'lobby';
   $('#setup-host-only-2').hidden = !isHost;
+  $('#start-hint').hidden = !isHost;
   const hn = (S.people || []).find((p) => p.id === S.hostId);
   $('#setup-hostname').textContent = hn ? hn.name : 'another device';
   $('#btn-start').hidden = !isHost;
   $('#btn-reset').hidden = !isHost;
+  // Say WHY start is refused rather than letting the tap do nothing.
+  if (isHost && S.state === 'lobby') {
+    const n = (S.people || []).filter((p) => p.alive).length;
+    const short = Math.max(0, 3 - n);
+    $('#btn-start').disabled = short > 0;
+    $('#start-hint').textContent = short
+      ? `Need ${short} more player${short === 1 ? '' : 's'} (${n}/3).`
+      : `${n} players ready.`;
+    $('#start-hint').hidden = false;
+  } else {
+    $('#btn-start').disabled = false;
+    $('#start-hint').hidden = true;
+  }
   if (!isHost) return;
   const sel = $('#sel-level');
   if (sel.options.length !== S.house.levels.length) {
@@ -1066,6 +1088,18 @@ function reportNow() {
 
 function toggleScan() { if (scanArmed) disarmScan(); else armScan(); }
 
+/* Chrome on Android has neither global scan API, so arming it means a board
+ * picker. Calling that from the Join click as well as from the welcome frame
+ * opened TWO pickers, and closing the second one bounced the player back to the
+ * join screen - the "screen keeps flipping". Only the click arms; the welcome
+ * frame arms only when the click did not (a director, or a resume). */
+let armAtJoin = false;
+function armForJoin() {
+  if ($('#in-director').checked) return;
+  armAtJoin = true;
+  armScan().finally(() => { armAtJoin = false; });
+}
+
 // Any touch anywhere on the page = "where am I, right now". Passive so it never
 // delays the tap's own action; ignore taps on the join screen (no player yet)
 // and on the role-reveal overlay (it has its own tap handler).
@@ -1138,8 +1172,8 @@ window.addEventListener('DOMContentLoaded', () => {
     if ($('#in-director').checked) warn.hidden = true;
     else if (!('bluetooth' in navigator)) warn.hidden = false;
   });
-  $('#btn-join').addEventListener('click', () => { if (!$('#in-director').checked) armScan(); joinGame(false); });
-  $('#btn-new').addEventListener('click', () => { if (!$('#in-director').checked) armScan(); joinGame(true); });
+  $('#btn-join').addEventListener('click', () => { armForJoin(); joinGame(false); });
+  $('#btn-new').addEventListener('click', () => { armForJoin(); joinGame(true); });
   $('#btn-menu').addEventListener('click', () => {
     const open = $('#menu').hidden;
     $('#menu').hidden = !open;
@@ -1164,6 +1198,17 @@ window.addEventListener('DOMContentLoaded', () => {
     if (me && me.id === S.hostId) send({ t: 'reset' });
     else leaveGame();
   });
+  // "Back to lobby" is the only button on the game-over card, so a host who
+  // needs one more player had no way to learn that and just bounced back out.
+  // Check it before leaving, not after.
+  $('#btn-again').addEventListener('click', (ev) => {
+    if (!S || !me || me.id !== S.hostId) return;
+    const n = (S.people || []).filter((p) => p.alive).length;
+    if (n < 3) {
+      ev.stopImmediatePropagation();
+      toast(`You need ${3 - n} more player${3 - n === 1 ? '' : 's'} before a round can start.`, 'bad', 6000);
+    }
+  }, true);
   $('#btn-takeover').addEventListener('click', () => send({ t: 'host' }));
   $('#btn-report').addEventListener('click', () => send({ t: 'report' }));
   $('#btn-emergency').addEventListener('click', () => send({ t: 'emergency' }));
