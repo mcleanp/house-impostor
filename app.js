@@ -276,7 +276,10 @@ function renderPeople() {
   const el = $('#people');
   el.innerHTML = here.length
     ? here.map((p) => `<div class="person"><span class="who">${crew(p.id, !p.alive)}${esc(p.name)} ${p.alive ? '' : '(down)'}${p.role ? ` <i>${p.role}</i>` : ''}</span>
-        ${you.role === 'impostor' && p.alive && you.alive ? `<button class="danger" data-kill="${p.id}">Kill</button>` : ''}</div>`).join('')
+        ${you.role === 'impostor' && p.alive && you.alive ? (() => {
+          const wait = Math.ceil(((S.killReadyAt || 0) - Date.now()) / 1000);
+          return wait > 0 ? `<button class="danger" disabled>Kill ${wait}s</button>` : `<button class="danger" data-kill="${p.id}">Kill</button>`;
+        })() : ''}</div>`).join('')
     : '<p class="sub">Nobody. Spooky.</p>';
   el.querySelectorAll('[data-kill]').forEach((b) => b.addEventListener('click', () => send({ t: 'kill', victim: b.dataset.kill })));
 
@@ -304,10 +307,12 @@ function renderTasks() {
   const you = S.you || {};
   const list = you.tasks || [];
   $('#panel-tasks').hidden = !(list.length && S.state === 'playing' && you.alive);
-  $('#holdhint').textContent = `hold ${(window.RULES ? RULES.TASK_HOLD_S : 5)}s, in the room`;
+  const holdFor = (t) => (t.kind === 'long' ? (window.RULES ? RULES.TASK_HOLD_LONG_S : 12) : (window.RULES ? RULES.TASK_HOLD_S : 5));
+  $('#holdhint').textContent = 'hold the button, in the room';
   $('#tasks').innerHTML = list.map((t) => `
     <div class="task ${t.done ? 'done' : ''}">
-      <span class="nm">${esc(t.name)} <span class="sub">@ ${esc(roomName(t.room))}</span></span>
+      <span class="nm">${esc(t.name)} <span class="sub">@ ${esc(roomName(t.room))}</span>
+        <span class="pill ${t.kind === 'long' ? 'long' : ''}">${t.kind === 'long' ? 'long' : 'short'}</span></span>
       ${t.done ? '<span>✔</span>' : `<button data-hold="${t.id}">Hold</button>`}
     </div>`).join('');
   $('#tasks').querySelectorAll('[data-hold]').forEach((b) => {
@@ -319,7 +324,7 @@ function renderTasks() {
       b.classList.add('holding');
       send({ t: 'taskStart', id });
       holdTimer = setInterval(() => {
-        const left = Math.max(0, (window.RULES ? RULES.TASK_HOLD_S : 5) - (Date.now() - holdAt) / 1000);
+        const left = Math.max(0, holdFor(t) - (Date.now() - holdAt) / 1000);
         b.textContent = left.toFixed(1) + 's';
       }, 100);
     };
@@ -340,7 +345,10 @@ function renderTasks() {
 
 function renderMeeting() {
   const you = S.you || {};
-  $('#m-timer').textContent = Math.max(0, Math.ceil((S.meetingEnds - Date.now()) / 1000));
+  const secs = Math.max(0, Math.ceil((S.meetingEnds - Date.now()) / 1000));
+  $('#m-timer').textContent = secs;
+  const bar = $('#m-bar');
+  if (bar) bar.style.setProperty('--p', String(S.meetingS ? Math.min(1, secs / S.meetingS) : 1));
   $('#m-votes').textContent = `votes in: ${S.votes ? S.votes.cast : 0} / ${S.votes ? S.votes.of : 0}`;
   const cands = (S.people || []).filter((p) => p.alive && p.id !== me.id && !p.__ghost);
   $('#vote').innerHTML = you.alive
@@ -354,7 +362,12 @@ function renderOver() {
   $('#over-title').textContent = first ? first.text : 'Round over';
   $('#over-roles').innerHTML = (S.people || []).map((p) =>
     `<div class="person"><span class="who">${crew(p.id, !p.alive)}${esc(p.name)}</span><span>${p.role || ''} ${p.alive ? '' : '(out)'}</span></div>`).join('');
-  $('#btn-again').hidden = me.id !== S.hostId;
+  // Everyone gets a way out of this screen. Only the host can start the next
+  // round, so for anyone else the button leaves the game instead of doing
+  // nothing and stranding them here.
+  const isHost = me.id === S.hostId;
+  $('#btn-again').hidden = false;
+  $('#btn-again').textContent = isHost ? 'Back to lobby' : 'Leave game';
 }
 
 function renderFeed() {
@@ -400,9 +413,21 @@ function buildHouseEditor() {
       '<h2>Rooms <span class="sub">first box = id (editable, lowercase; it is the beacon name), second = display name</span></h2><div id="he-rooms"></div><button id="he-addroom" class="ghost">+ room</button>' +
       '<h2>Doors</h2><div id="he-doors"></div>' +
       '<div class="he-task"><select id="he-da"></select><span class="sub">↔</span><select id="he-db"></select><button id="he-adddoor" class="ghost">+ door</button></div>' +
+      '<h2>Settings</h2><label>Meeting / voting time (seconds, 15-300)</label><input id="he-meeting" type="number" min="15" max="300" step="5">' +
       '<h2>Tasks</h2><div id="he-tasks"></div><button id="he-add" class="ghost">+ task</button>';
 
-    const drawAll = () => { drawFloors(); drawRooms(); drawDoors(); drawTasks(); };
+    const drawAll = () => { drawFloors(); drawRooms(); drawDoors(); drawTasks(); drawSettings(); };
+
+    const drawSettings = () => {
+      h.settings = h.settings || {};
+      const inp = $('#he-meeting');
+      inp.value = h.settings.meetingS || (window.RULES ? RULES.MEETING_S : 60);
+      inp.addEventListener('change', () => {
+        const n = Math.round(Number(inp.value));
+        h.settings.meetingS = Number.isFinite(n) ? Math.min(300, Math.max(15, n)) : 60;
+        inp.value = h.settings.meetingS;
+      });
+    };
 
     const drawFloors = () => {
       $('#he-floors').innerHTML = playFloors().map((f) => `
@@ -503,15 +528,17 @@ function buildHouseEditor() {
       $('#he-tasks').innerHTML = h.tasks.map((t, i) => `
         <div class="he-task"><input data-task="${i}" value="${esc(t.name)}">
         <select data-troom="${i}">${rooms.map((r) => `<option value="${r.id}" ${r.id === t.room ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select>
+        <select data-tkind="${i}"><option value="short" ${t.kind === 'long' ? '' : 'selected'}>short</option><option value="long" ${t.kind === 'long' ? 'selected' : ''}>long</option></select>
         <button data-tdel="${i}" class="ghost">✕</button></div>`).join('');
       el.querySelectorAll('[data-task]').forEach((inp) => inp.addEventListener('change', () => { h.tasks[+inp.dataset.task].name = inp.value; }));
       el.querySelectorAll('[data-troom]').forEach((s) => s.addEventListener('change', () => { h.tasks[+s.dataset.troom].room = s.value; }));
+      el.querySelectorAll('[data-tkind]').forEach((s) => s.addEventListener('change', () => { h.tasks[+s.dataset.tkind].kind = s.value === 'long' ? 'long' : 'short'; }));
       el.querySelectorAll('[data-tdel]').forEach((b) => b.addEventListener('click', () => { h.tasks.splice(+b.dataset.tdel, 1); drawTasks(); }));
     };
     $('#he-add').addEventListener('click', () => {
       const rooms = playRooms();
       if (!rooms.length) { toast('Add a room first.', 'bad'); return; }
-      h.tasks.push({ room: rooms[0].id, name: 'New chore' }); drawTasks();
+      h.tasks.push({ room: rooms[0].id, name: 'New chore', kind: 'short' }); drawTasks();
     });
 
     drawAll();
@@ -837,7 +864,10 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   $('#btn-start').addEventListener('click', () => send({ t: 'start', level: $('#sel-level').value }));
   $('#btn-reset').addEventListener('click', () => send({ t: 'reset' }));
-  $('#btn-again').addEventListener('click', () => send({ t: 'reset' }));
+  $('#btn-again').addEventListener('click', () => {
+    if (me && me.id === S.hostId) send({ t: 'reset' });
+    else leaveGame();
+  });
   $('#btn-report').addEventListener('click', () => send({ t: 'report' }));
   $('#btn-emergency').addEventListener('click', () => send({ t: 'emergency' }));
   $('#btn-skip').addEventListener('click', () => send({ t: 'vote', target: 'skip' }));
@@ -865,6 +895,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // meeting countdown + kill cooldown ticking locally
   setInterval(() => { if (S) { if (S.state === 'meeting') renderMeeting(); } }, 500);
+  // kill cooldown ticks locally; the button only re-renders on a state push
+  setInterval(() => { if (S && S.state === 'playing' && S.you && S.you.role === 'impostor') renderPeople(); }, 1000);
   // heartbeat so the server can tell a closed tunnel from a live phone
   setInterval(() => { if (ws && ws.readyState === 1) send({ t: 'ping' }); }, 25000);
   // keep screen awake during a round (iOS freezes BLE when the screen sleeps)

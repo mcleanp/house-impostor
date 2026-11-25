@@ -39,7 +39,8 @@
     {
       "id": "land2",
       "floor": "f2",
-      "name": "Top landing"
+      "name": "Top landing",
+      "landing": true
     },
     {
       "id": "down",
@@ -49,7 +50,8 @@
     {
       "id": "land1",
       "floor": "f1",
-      "name": "Stair landing"
+      "name": "Stair landing",
+      "landing": true
     },
     {
       "id": "base1",
@@ -64,7 +66,8 @@
     {
       "id": "land0",
       "floor": "f0",
-      "name": "Basement landing"
+      "name": "Basement landing",
+      "landing": true
     },
     {
       "id": "room",
@@ -157,64 +160,137 @@
   "tasks": [
     {
       "room": "bed1",
-      "name": "Fluff every pillow in this room"
+      "name": "Fluff every pillow in this room",
+      "kind": "short"
     },
     {
       "room": "bed1",
-      "name": "Fold one item of clothing and put it away"
+      "name": "Fold one item of clothing and put it away",
+      "kind": "short"
     },
     {
       "room": "bed2",
-      "name": "Make one bed properly"
+      "name": "Make one bed properly",
+      "kind": "short"
     },
     {
       "room": "bed2",
-      "name": "Line up the shoes by the door of this room"
+      "name": "Line up the shoes by the door of this room",
+      "kind": "short"
     },
     {
       "room": "bath",
-      "name": "Wipe one patch of the mirror"
+      "name": "Wipe one patch of the mirror",
+      "kind": "short"
     },
     {
       "room": "bath",
-      "name": "Fold a towel into thirds and stack it"
+      "name": "Fold a towel into thirds and stack it",
+      "kind": "short"
     },
     {
       "room": "down",
-      "name": "Load one dish into the dishwasher"
+      "name": "Load one dish into the dishwasher",
+      "kind": "short"
     },
     {
       "room": "down",
-      "name": "Wipe one section of the table"
+      "name": "Wipe one section of the table",
+      "kind": "short"
     },
     {
       "room": "down",
-      "name": "Put the TV remote back on its spot"
+      "name": "Put the TV remote back on its spot",
+      "kind": "short"
     },
     {
       "room": "down",
-      "name": "Turn off one lamp that is on (or switch one on)"
-    },
-    {
-      "room": "land2",
-      "name": "Carry one thing that does not belong back upstairs"
-    },
-    {
-      "room": "land1",
-      "name": "Pick up one item from the stairs and return it"
-    },
-    {
-      "room": "land0",
-      "name": "Bring one thing from the basement up to the landing"
+      "name": "Turn off one lamp that is on (or switch one on)",
+      "kind": "short"
     },
     {
       "room": "base1",
-      "name": "Stack anything stackable in this room"
+      "name": "Stack anything stackable in this room",
+      "kind": "short"
     },
     {
       "room": "base2",
-      "name": "Find one labelled item and put it where it belongs"
+      "name": "Find one labelled item and put it where it belongs",
+      "kind": "short"
+    },
+    {
+      "room": "bed1",
+      "name": "Straighten the things on the nightstand",
+      "kind": "short"
+    },
+    {
+      "room": "bed2",
+      "name": "Open the curtains and shut them again",
+      "kind": "short"
+    },
+    {
+      "room": "bath",
+      "name": "Put the toothbrushes back in the cup",
+      "kind": "short"
+    },
+    {
+      "room": "down",
+      "name": "Straighten the cushions on the sofa",
+      "kind": "short"
+    },
+    {
+      "room": "base1",
+      "name": "Line up the tins on the shelf",
+      "kind": "short"
+    },
+    {
+      "room": "base2",
+      "name": "Match two pairs of socks",
+      "kind": "short"
+    },
+    {
+      "room": "room",
+      "name": "Clear one surface completely",
+      "kind": "short"
+    },
+    {
+      "room": "room2",
+      "name": "Wipe one countertop section",
+      "kind": "short"
+    },
+    {
+      "room": "bed1",
+      "name": "Strip and remake one bed",
+      "kind": "long"
+    },
+    {
+      "room": "bath",
+      "name": "Clean the whole mirror properly",
+      "kind": "long"
+    },
+    {
+      "room": "down",
+      "name": "Wash and dry one sinkful of dishes",
+      "kind": "long"
+    },
+    {
+      "room": "room",
+      "name": "Tidy the whole living room table",
+      "kind": "long"
+    },
+    {
+      "room": "room2",
+      "name": "Put away everything left on the counter",
+      "kind": "long"
+    },
+    {
+      "room": "base1",
+      "name": "Sort the whole shelf into order",
+      "kind": "long"
     }
   ],
-  "beacons": []
+  "beacons": [],
+  "settings": {
+    "meetingS": 60
+  }
 }

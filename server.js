@@ -29,10 +29,12 @@ const RULES = {
   IMPOSTOR_TWO_AT: 7,       // second impostor from this many players
   TASKS_PER_PLAYER: 4,
   TASK_HOLD_S: 5,           // press-and-hold on the task button, in the right room
+  TASK_HOLD_LONG_S: 12,     // the same, for a task marked "long"
+  TASKS_ON_LANDINGS: false, // landings are corridors: chores belong in rooms
   MOVE_COOLDOWN_S: 3,       // per door-traversal; stops teleport-cheese
   KILL_COOLDOWN_S: 45,
   POST_MEETING_COOLDOWN_S: 20,
-  MEETING_S: 45,
+  MEETING_S: 60,            // default; the host can change it in Setup (house.settings)
   RSSI_FLOOR: -92,          // dBm: weaker than this proves nothing
   RSSI_MARGIN: 5,           // winner must beat 2nd-best beacon by this much
   BEACON_STALE_S: 6,        // beacon report older than this is ignored
@@ -211,6 +213,10 @@ function normaliseHouse(h) {
   h.levels = (h.levels || []).filter((l) => l && l.id);
   h.tasks = (h.tasks || []).filter((t) => t && t.name && t.room);
   h.beacons = (h.beacons || []).filter((b) => b && b.room);
+  // Host settings that survive a save. Bounded here so a hand-edited file
+  // cannot set a silly meeting length.
+  const ms = Math.round(Number((h.settings || {}).meetingS));
+  h.settings = { meetingS: Number.isFinite(ms) ? Math.min(300, Math.max(15, ms)) : RULES.MEETING_S };
   // The lobby is the "out" area: dead players walk there. Not part of the
   // movement graph, never a task room, always present.
   if (!h.rooms.find((r) => r.id === 'lobby')) {
@@ -430,21 +436,39 @@ function assignRoles(room) {
   for (const p of players) p.role = impSet.has(p.id) ? 'impostor' : 'crew';
 }
 
-function assignTasks(room) {
+/* Task pool for a level. Landings are corridors, so by default they are
+ * skipped - a chore you cannot do without blocking the stairs is not a chore.
+ * Set TASKS_ON_LANDINGS to keep them. */
+function taskPool(room) {
   const active = levelRooms(room);
-  const pool = HOUSE.tasks.filter((t, i) => active.has(t.room) && roomById(t.room)).map((t, i) => ({ ...t, tid: 'T' + i }));
+  return HOUSE.tasks
+    .filter((t) => active.has(t.room) && roomById(t.room))
+    .filter((t) => RULES.TASKS_ON_LANDINGS || !roomById(t.room).landing)
+    .map((t, i) => ({ ...t, tid: 'T' + i }));
+}
+
+function assignTasks(room) {
+  let pool = taskPool(room);
+  // A level made only of landings would otherwise have no chores at all.
+  if (!pool.length) pool = HOUSE.tasks.filter((t) => levelRooms(room).has(t.room) && roomById(t.room)).map((t, i) => ({ ...t, tid: 'T' + i }));
   if (!pool.length) return false;
+  // Impostors get chores too, so standing still over a "task" is not a tell.
+  // They are assigned exactly like crew; their progress just does not count.
   for (const p of alivePlayers(room)) {
     const pick = [...pool];
     for (let i = pick.length - 1; i > 0; i--) {
       const j = crypto.randomInt(i + 1);
       [pick[i], pick[j]] = [pick[j], pick[i]];
     }
-    p.tasks = pick.slice(0, Math.min(RULES.TASKS_PER_PLAYER, pick.length)).map((t) => ({ id: t.tid, name: t.name, room: t.room, done: false }));
+    p.tasks = pick.slice(0, Math.min(RULES.TASKS_PER_PLAYER, pick.length))
+      .map((t) => ({ id: t.tid, name: t.name, room: t.room, kind: t.kind === 'long' ? 'long' : 'short', done: false }));
     p.hold = null;
   }
   return true;
 }
+
+/* How long a task's button must be held. */
+const holdSeconds = (task) => (task.kind === 'long' ? RULES.TASK_HOLD_LONG_S : RULES.TASK_HOLD_S);
 
 function taskProgress(room) {
   const crew = crewAlive(room).concat([...room.players.values()].filter((p) => p.joined && !p.alive && p.role === 'crew'));
@@ -512,14 +536,25 @@ function killPlayer(room, killer, victimId) {
   v.alive = false; v.room = 'lobby'; v.roomSource = 'dead'; v.hold = null;
   room.killReadyAt = Date.now() + RULES.KILL_COOLDOWN_S * 1000;
   room.bodies.push({ room: killer.room, victimId, ts: Date.now() });
-  roomEvent(room, { type: 'kill', text: `${killer.name} killed ${v.name} in the ${roomById(killer.room).name}.` });
+  // Public feed line: who, but NOT where - the room is half the puzzle and the
+  // body is found by walking into it. The killer and the victim each get a
+  // private note on top of that.
+  roomEvent(room, { type: 'kill', text: `${killer.name} killed ${v.name}.` });
   v.conn.send({ t: 'died', by: killer.name, room: room.bodies[room.bodies.length - 1].room });
+  killer.conn.send({ t: 'nope', text: `You killed ${v.name} in the ${roomById(killer.room).name}. Walk away.` });
   return null;
+}
+
+/* Meeting length: the host's setting if they made one, else the default.
+ * Bounded so a typo cannot open a 40-minute meeting. */
+function meetingSeconds() {
+  const n = Math.round(Number((HOUSE.settings || {}).meetingS));
+  return Number.isFinite(n) && n >= 15 && n <= 300 ? n : RULES.MEETING_S;
 }
 
 function startMeeting(room, reason) {
   room.state = 'meeting';
-  room.meetingEnds = Date.now() + RULES.MEETING_S * 1000;
+  room.meetingEnds = Date.now() + meetingSeconds() * 1000;
   room.votes.clear();
   room.killReadyAt = Date.now() + RULES.POST_MEETING_COOLDOWN_S * 1000;
   roomEvent(room, { type: 'meeting', text: reason });
@@ -572,17 +607,21 @@ function checkWin(room) {
  * ------------------------------------------------------------------ */
 function snapshotFor(room, p) {
   const inPlay = room.state !== 'lobby';
-  const visible = [...room.players.values()].filter((q) =>
-    q.joined && !q.director && (p.director || !p.alive || !q.alive ? p.director || !p.alive : q.room === p.room && q.alive));
+  // Fog of war by room - EXCEPT during a meeting, where everyone is on the
+  // same call and must be able to vote for anyone. Without this the ballot was
+  // limited to whoever happened to share your room (often nobody).
+  const visible = [...room.players.values()].filter((q) => q.joined && !q.director
+    && (room.state === 'meeting' || p.director || !p.alive || !q.alive
+        ? true : q.room === p.room && q.alive));
   const me = p.director ? null : p;
   return {
     t: 'state',
-    house: { floors: HOUSE.floors, rooms: HOUSE.rooms, levels: HOUSE.levels },
+    house: { floors: HOUSE.floors, rooms: HOUSE.rooms, levels: HOUSE.levels, settings: HOUSE.settings },
     level: room.levelId,
     code: room.code, hostId: room.hostId,
     state: room.state,
     now: Date.now(),
-    killReadyAt: room.killReadyAt, meetingEnds: room.meetingEnds,
+    killReadyAt: room.killReadyAt, meetingEnds: room.meetingEnds, meetingS: meetingSeconds(),
     progress: inPlay ? Math.round(taskProgress(room) * 100) : 0,
     events: room.events.slice(-12),
     votes: room.state === 'meeting' ? { cast: room.votes.size, of: alivePlayers(room).length } : null,
@@ -645,9 +684,11 @@ function handleMsg(room, p, msg) {
       const held = (Date.now() - p.hold.at) / 1000;
       p.hold = null;
       if (task.room !== p.room) { p.conn.send({ t: 'nope', text: 'You left the room - hold it there.' }); return; }
-      if (held + 0.4 < RULES.TASK_HOLD_S) { p.conn.send({ t: 'nope', text: `Hold the button for ${RULES.TASK_HOLD_S}s, actually doing the chore.` }); return; }
+      if (held + 0.4 < holdSeconds(task)) { p.conn.send({ t: 'nope', text: `Hold the button for ${holdSeconds(task)}s, actually doing the chore.` }); return; }
       task.done = true;
-      roomEvent(room, { type: 'task', text: `${p.name} completed "${task.name}"${p.role === 'impostor' ? ' (faked?)' : ''}.` });
+      // No "(faked?)" tag: the feed is public, and a tag on every impostor task
+      // hands their role away the moment they fake one.
+      roomEvent(room, { type: 'task', text: `${p.name} completed "${task.name}".` });
       broadcastState(room);
       checkWin(room);
       break;
@@ -980,10 +1021,12 @@ setInterval(() => {
         if (!p.joined || p.director || !p.alive) continue;
         if (p.hold) {
           const task = (p.tasks || []).find((x) => x.id === p.hold.id && !x.done);
-          if (!task || now - p.hold.at > RULES.TASK_HOLD_S * 1000 + 60000) p.hold = null;
-          else if (task.room === p.room && (now - p.hold.at) / 1000 >= RULES.TASK_HOLD_S) {
+          if (!task || now - p.hold.at > holdSeconds(task) * 1000 + 60000) p.hold = null;
+          else if (task.room === p.room && (now - p.hold.at) / 1000 >= holdSeconds(task)) {
             task.done = true; p.hold = null;
-            roomEvent(room, { type: 'task', text: `${p.name} completed "${task.name}"${p.role === 'impostor' ? ' (faked?)' : ''}.` });
+            // No "(faked?)" tag: the feed is public, and a tag on every impostor task
+      // hands their role away the moment they fake one.
+      roomEvent(room, { type: 'task', text: `${p.name} completed "${task.name}".` });
             dirty = true;
             checkWin(room);
           }

@@ -1,0 +1,25 @@
+const wsc=require('/tmp/wsc.js');
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+(async()=>{
+  const C='TEST';
+  const ids=['pA','pB','pC'];
+  const cs=ids.map(i=>wsc(8399,'/ws?room='+C+'&name='+i+'&pid='+i,()=>{}));
+  await sleep(1200);
+  const st=()=>cs[0].msgs.filter(m=>m.t==='state').pop();
+  cs[0].send({t:'start',level:'house'});
+  await sleep(1200);
+  console.log('state',st().state);
+  cs[0].send({t:'emergency'});
+  await sleep(800);
+  console.log('after emergency:',st().state,'votes:',JSON.stringify(st().votes));
+  const cand=(st().people||[]).find(p=>p.id!=='pA');
+  cs[0].send({t:'vote',target:cand.id});
+  await sleep(400);
+  console.log('after 1 vote:',st().state,JSON.stringify(st().votes));
+  cs[1].send({t:'vote',target:'skip'});
+  cs[2].send({t:'vote',target:'skip'});
+  await sleep(900);
+  console.log('after all votes:',st().state,JSON.stringify(st().votes));
+  console.log('events:',(st().events||[]).slice(-4).map(e=>e.text).join(' | '));
+  process.exit();
+})();
