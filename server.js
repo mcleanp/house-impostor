@@ -738,6 +738,16 @@ function handleMsg(room, p, msg) {
       if (room.votes.size >= alivePlayers(room).length) { endMeeting(room); broadcastState(room); }
       break;
     }
+    case 'host': {
+      // Take the host seat - for when the host's phone is not to hand. Lobby
+      // only, so a round in progress cannot change hands mid-way.
+      if (room.state !== 'lobby') { p.conn.send({ t: 'nope', text: 'You can only take over in the lobby.' }); return; }
+      if (p.director) { p.conn.send({ t: 'nope', text: 'A director cannot host - join as a player.' }); return; }
+      room.hostId = p.id;
+      roomEvent(room, { type: 'host', text: `${p.name} is now the host.` });
+      broadcastState(room);
+      break;
+    }
     case 'start': {
       if (p.id !== room.hostId) { p.conn.send({ t: 'nope', text: 'Only the host starts the round.' }); return; }
       if (room.state !== 'lobby') return;

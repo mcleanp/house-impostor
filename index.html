@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>House Impostor</title>
-<link rel="stylesheet" href="style.css?v=ui15">
+<link rel="stylesheet" href="style.css?v=ui16">
 </head>
 <body>
 
 <!-- join -->
 <section id="scr-join" class="screen">
-  <div class="hero"><img src="img-hero-art.jpg?v=ui15" alt="Crewmates" width="960" height="620"></div>
+  <div class="hero"><img src="img-hero-art.jpg?v=ui16" alt="Crewmates" width="960" height="620"></div>
   <div id="floaters" aria-hidden="true"></div>
   <div class="card">
     <h1>House<br><span>Impostor</span></h1>
@@ -67,14 +67,18 @@
 
   <div id="panel-setup" class="card" hidden>
     <h2>Host setup</h2>
+    <p id="setup-host-only" class="sub">Only the host can start a round. The host is <b id="setup-hostname">someone else</b>.</p>
+    <button id="btn-takeover" class="big">Make me host</button>
     <label>Level <select id="sel-level"></select></label>
     <button id="btn-start" class="big">Start round</button>
     <button id="btn-reset" class="ghost">Back to lobby</button>
+    <div id="setup-host-only-2">
     <details><summary>Edit house (rooms, tasks)</summary>
       <div id="house-edit"></div>
       <button id="btn-house-save" class="ghost">Save house</button>
     </details>
     <div id="beacons" class="sub"></div>
+    </div>
   </div>
 
   <div id="feed" class="card"><h2>Feed</h2><div id="events"></div></div>
@@ -123,7 +127,7 @@
 
 <div id="toast"></div>
 
-<script src="config.js?v=ui15"></script>
-<script src="app.js?v=ui15"></script>
+<script src="config.js?v=ui16"></script>
+<script src="app.js?v=ui16"></script>
 </body>
 </html>

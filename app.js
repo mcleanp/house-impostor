@@ -624,7 +624,17 @@ function renderFeed() {
 
 function renderSetup() {
   const isHost = me.id === S.hostId && !me.director;
-  $('#panel-setup').hidden = !(isHost && (S.state === 'lobby' || S.state === 'over'));
+  const setupOpen = S.state === 'lobby' || S.state === 'over';
+  // Non-hosts get the panel too, with one button: "Make me host". Without it a
+  // phone can never start a round unless the host's phone is in the room.
+  $('#panel-setup').hidden = !setupOpen;
+  $('#setup-host-only').hidden = isHost;
+  $('#btn-takeover').hidden = isHost || S.state !== 'lobby';
+  $('#setup-host-only-2').hidden = !isHost;
+  const hn = (S.people || []).find((p) => p.id === S.hostId);
+  $('#setup-hostname').textContent = hn ? hn.name : 'another device';
+  $('#btn-start').hidden = !isHost;
+  $('#btn-reset').hidden = !isHost;
   if (!isHost) return;
   const sel = $('#sel-level');
   if (sel.options.length !== S.house.levels.length) {
@@ -939,15 +949,10 @@ async function armScan() {
       // every watched handle (the adverts arrive on the granted listeners, not the
       // picked one). requestDevice() needs no fresh gesture, so we call it AFTER
       // attaching - the player just taps Join, never a chooser.
+      // ORDER MATTERS. requestDevice() must be called before any other await,
+      // or Chrome on Android has lost the tap gesture and throws SecurityError.
+      // getDevices() is therefore only used to top up after the picker.
       let devs = [];
-      if (navigator.bluetooth.getDevices) {
-        try { devs = (await navigator.bluetooth.getDevices()).filter((d) => (d.name || '').startsWith(CFG.BLE_PREFIX || 'HB-')); } catch {}
-      }
-      for (const d of devs) {
-        if (typeof d.watchAdvertisements !== 'function') continue;
-        d.addEventListener('advertisementreceived', onAdvert);
-        try { await d.watchAdvertisements(); watching++; } catch (e) { watchErr = (e && e.name) + ':' + (e && e.message); }
-      }
       if (navigator.bluetooth.requestDevice) {
         try {
           const tPick = Date.now();
@@ -960,6 +965,17 @@ async function armScan() {
           }
         } catch (e) { pickErr = (e && e.name) + ':' + (e && e.message); }
       }
+      if (navigator.bluetooth.getDevices) {
+        try {
+          const known = (await navigator.bluetooth.getDevices()).filter((d) => (d.name || '').startsWith(CFG.BLE_PREFIX || 'HB-'));
+          for (const d of known) {
+            if (devs.includes(d) || typeof d.watchAdvertisements !== 'function') continue;
+            d.addEventListener('advertisementreceived', onAdvert);
+            try { await d.watchAdvertisements(); watching++; } catch (e) { watchErr = (e && e.name) + ':' + (e && e.message); }
+            devs.push(d);
+          }
+        } catch {}
+      }
       scanDevs = devs;
       devNames = devs.map((d) => d.name || '(noname)');
       if (!watching && navigator.bluetooth.requestLEScan) {
@@ -967,7 +983,15 @@ async function armScan() {
         lescan = await navigator.bluetooth.requestLEScan({ acceptAllAdvertisements: true });
         watching = 1;
       }
-      if (!watching) { diag({ ev: 'arm-none', devs: devNames.length, watchErr }); st.textContent = 'this browser cannot scan - tap "Pair my beacons" once instead.'; return; }
+      if (!watching) {
+        diag({ ev: 'arm-none', devs: devNames.length, watchErr, pickErr });
+        st.textContent = /NotFound/.test(pickErr)
+          ? 'you closed the board picker - tap "Auto-detect room" to try again.'
+          : /Security|NotAllowed/.test(pickErr)
+            ? 'Chrome dropped the tap - tap "Auto-detect room" and pick a board.'
+            : 'this browser cannot scan - tap "Pair my beacons" once instead.';
+        return;
+      }
     }
     scanArmed = true;
     lastAdvertAt = Date.now(); lastRestartAt = Date.now();
@@ -1140,6 +1164,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (me && me.id === S.hostId) send({ t: 'reset' });
     else leaveGame();
   });
+  $('#btn-takeover').addEventListener('click', () => send({ t: 'host' }));
   $('#btn-report').addEventListener('click', () => send({ t: 'report' }));
   $('#btn-emergency').addEventListener('click', () => send({ t: 'emergency' }));
   $('#btn-skip').addEventListener('click', () => send({ t: 'vote', target: 'skip' }));
