@@ -967,7 +967,7 @@ async function pairBeacon() {
 // navigator.bluetooth.requestLEScan. Both need a user gesture to start.
 let scanArmed = false, seen = {}, lescan = null, sampleTimer = null, scanDevs = [];
 let lastAdvertAt = 0, lastRestartAt = 0, restarting = false, newBeaconTimer = null;
-let lastReportAt = 0, tapTimer = null;
+let lastReportAt = 0, tapTimer = null, manualMode = false, manualRoomId = '';
 
 function onAdvert(e) {
   const d = e.device || {};
@@ -1019,9 +1019,19 @@ function diag(o) {
  * the welcome frame arms the scan the gesture is gone (SecurityError). So the
  * click calls this synchronously; armScan() then awaits the same promise. */
 let pickPromise = null;
+/* True when this browser can hear advertisements at all. Android Chrome ships
+ * neither requestLEScan nor watchAdvertisements without
+ * chrome://flags/#enable-experimental-web-platform-features, so those phones
+ * fall back to "pick your room" (see manualRoom below). */
+function canHearAdverts() {
+  if (!navigator.bluetooth) return false;
+  if (navigator.bluetooth.requestLEScan || navigator.bluetooth.watchAdvertisements) return true;
+  return typeof BluetoothDevice !== 'undefined'
+    && typeof BluetoothDevice.prototype.watchAdvertisements === 'function';
+}
+
 function pickDevice() {
   if (pickPromise || !navigator.bluetooth || !navigator.bluetooth.requestDevice) return;
-  if (navigator.bluetooth.requestLEScan || navigator.bluetooth.watchAdvertisements) return;
   try {
     pickPromise = navigator.bluetooth.requestDevice({ filters: [{ namePrefix: CFG.BLE_PREFIX || 'HB-' }] });
   } catch (e) { pickPromise = Promise.reject(e); }
@@ -1091,6 +1101,19 @@ async function armScan() {
       }
       scanDevs = devs;
       devNames = devs.map((d) => d.name || '(noname)');
+      // No way to hear advertisements: the picked board IS the room. Report it
+      // once, then re-send on the heartbeat so the server TTL never expires.
+      if (!watching && devs.length) {
+        manualMode = true;
+        manualRoomId = (devs[0].name || '').replace(CFG.BLE_PREFIX || 'HB-', '');
+        scanArmed = true;
+        clearInterval(sampleTimer);
+        sampleTimer = setInterval(reportManual, CFG.SCAN_EVERY_MS || 8000);
+        reportManual();
+        diag({ ev: 'arm-manual', room: manualRoomId, devs: devNames.length });
+        st.textContent = `room set to ${roomName(manualRoomId)} by the board you picked. Walk somewhere else, then tap "Auto-detect room" again.`;
+        return;
+      }
       if (!watching && navigator.bluetooth.requestLEScan) {
         navigator.bluetooth.addEventListener('advertisementreceived', onAdvert);
         lescan = await navigator.bluetooth.requestLEScan({ acceptAllAdvertisements: true });
@@ -1125,11 +1148,27 @@ async function armScan() {
 }
 
 function disarmScan() {
-  scanArmed = false;
+  scanArmed = false; manualMode = false; manualRoomId = '';
   clearInterval(sampleTimer);
   try { if (lescan && lescan.stop) lescan.stop(); } catch {}
   lescan = null;
   $('#ble-status').textContent = 'scan off.';
+}
+
+function roomName(id) {
+  const r = S && S.house && (S.house.rooms || []).find((x) => x.id === id);
+  return r ? r.name : id;
+}
+
+async function reportManual() {
+  if (!scanArmed || !me || !manualRoomId) return;
+  lastReportAt = Date.now();
+  try {
+    await fetch('/api/scan', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-beacon-key': CFG.BEACON_KEY || 'house' },
+      body: JSON.stringify({ p: me.id, manual: manualRoomId }),
+    });
+  } catch {}
 }
 
 async function reportScan() {
@@ -1174,7 +1213,7 @@ function reportNow() {
     return;
   }
   clearTimeout(tapTimer); tapTimer = null;
-  reportScan();
+  if (manualMode) reportManual(); else reportScan();
 }
 
 function toggleScan() { if (scanArmed) disarmScan(); else { pickDevice(); armScan(); } }
@@ -1231,7 +1270,9 @@ window.addEventListener('DOMContentLoaded', () => {
   const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   // Directors never touch Bluetooth, so the whole warning is noise for them.
-  if (!('bluetooth' in navigator) && !$('#in-director').checked) {
+  // Also shown on Android Chrome that cannot hear advertisements (no flag):
+  // there the picker is the only way to set a room, so the steps matter.
+  if ((!('bluetooth' in navigator) || !canHearAdverts()) && !$('#in-director').checked) {
     $('#ble-warn').hidden = false;
     if (iOS) {
       $('#ble-warn').innerHTML =
@@ -1247,8 +1288,9 @@ window.addEventListener('DOMContentLoaded', () => {
         '1. Tap the <b>padlock</b> in the address bar &gt; <b>Permissions</b> &gt; <b>Nearby devices</b> &gt; Allow.<br>' +
         '2. Android Settings &gt; Apps &gt; Chrome &gt; Permissions &gt; <b>Nearby devices</b> &gt; Allow.<br>' +
         '3. Make sure phone <b>Location</b> is on and Chrome has Location permission - Android will not scan for beacons without it.<br>' +
-        '4. Reload this page and tap Join. Chrome shows a device picker the first time - pick any <b>HB-</b> board.<br>' +
-        'Still nothing? Chrome menu &gt; <b>Add to Home screen</b> and open it from there, or use Edge/Firefox. Tapping doors always works.';
+        '4. Reload this page and tap Join. Chrome shows a board picker - pick the board of the room you are <b>standing in</b>. That sets your room.<br>' +
+        '5. Walk to another room, then tap <b>Auto-detect room</b> and pick that room\'s board. Tapping doors still works too.<br>' +
+        'Want it fully automatic like the iPhones? Open <b>chrome://flags/#enable-experimental-web-platform-features</b>, set it to <b>Enabled</b>, and relaunch Chrome. Then one pick covers every room.';
     } else {
       $('#ble-warn').textContent = 'No Web Bluetooth here - you can still play by tapping the door you walk through.';
     }

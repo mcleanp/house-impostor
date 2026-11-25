@@ -272,6 +272,12 @@ function neighbours(id) {
  * the call). Cal offsets are per room in house.json (cal: dBm at 1 m).
  * ------------------------------------------------------------------ */
 const sightings = new Map();   // playerId -> Map(beaconRoom -> {r, ts})
+/* Android Chrome has no scan API without a flag, so those phones fall back to
+ * the device picker: the board the player picks IS their room. That is
+ * self-reported, not measured, so it is kept apart from RSSI sightings and
+ * gets its own TTL instead of competing on signal strength. */
+const manualRoom = new Map();   // playerId -> {room, ts}
+const MANUAL_TTL_MS = 10 * 60 * 1000;
 
 function ingestBeacon(body) {
   const b = String(body.beacon || '').slice(0, 24);
@@ -335,6 +341,14 @@ function resolveRoom(playerId, stickTo) {
 function ingestPhoneScan(body) {
   const p = String(body.p || '').slice(0, 24);
   if (!p) return 'no player';
+  // Manual check-in from a phone that cannot scan: the picked board is the room.
+  if (body.manual) {
+    const m = String(body.manual).replace(/^HB-/, '').slice(0, 24);
+    if (!roomById(m)) return 'no such room';
+    manualRoom.set(p, { room: m, ts: Date.now() });
+    console.log('phone ' + p + ' manual room -> ' + m);
+    return 'ok';
+  }
   const now = Date.now();
   let m = sightings.get(p);
   if (!m) { m = new Map(); sightings.set(p, m); }
@@ -361,7 +375,11 @@ function reresolveLive() {
       // 'over' too: the role-reveal screen is where everyone stands around
       // reading who was the impostor, and their rooms must still track.
       if (room.state === 'meeting') continue;
-      const best = resolveRoom(pl.id, pl.roomSource === 'beacon' ? pl.room : null);
+      const man = manualRoom.get(pl.id);
+      if (man && Date.now() - man.ts > MANUAL_TTL_MS) manualRoom.delete(pl.id);
+      const best = (man && Date.now() - man.ts <= MANUAL_TTL_MS && roomById(man.room))
+        ? man.room
+        : resolveRoom(pl.id, pl.roomSource === 'beacon' ? pl.room : null);
       if (best) pl.lastGoodAt = Date.now();   // fresh evidence: reset the grace clock
       if (best && best !== pl.room) {
         pl.room = best; pl.roomSource = 'beacon'; pl.movedAt = Date.now();
@@ -1102,8 +1120,11 @@ setInterval(() => {
             checkWin(room);
           }
         }
-        // Beacon evidence trumps a tap, always.
-        const best = resolveRoom(p.id, p.roomSource === 'beacon' ? p.room : null);
+        // Beacon evidence trumps a tap, always. A manual (picker) room trumps both.
+        const man = manualRoom.get(p.id);
+        const best = (man && now - man.ts <= MANUAL_TTL_MS && roomById(man.room))
+          ? man.room
+          : resolveRoom(p.id, p.roomSource === 'beacon' ? p.room : null);
         if (best && best !== p.room) { p.room = best; p.roomSource = 'beacon'; p.movedAt = now; dirty = true; }
         // Walking into a room with a body reports it for you. Checked after the
         // room update so a beacon-driven arrival counts the same as a tap.
