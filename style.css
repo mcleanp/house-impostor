@@ -296,3 +296,9 @@ details summary{cursor:pointer;color:var(--gold);font-weight:800;text-transform:
 .beam{position:absolute;left:0;right:0;height:3px;background:var(--cyan);box-shadow:0 0 14px var(--cyan);animation:scanmove 1.4s ease-in-out infinite alternate}
 @keyframes scanmove{from{top:10%}to{top:90%}}
 .task button[disabled]{opacity:.45}
+
+/* The game-over card must never trap the player: it scrolls on a short
+   laptop window and the button is pinned into view. */
+#scr-over{z-index:25}
+#scr-over .card{max-height:calc(100vh - 2rem);overflow:auto}
+#btn-again{position:sticky;bottom:0}

@@ -5,6 +5,7 @@
 const $ = (s) => document.querySelector(s);
 const CFG = window.CFG || {};
 let ws = null, me = null, S = null;   // S = last server snapshot
+let resumeRoom = '';   // set at boot; cleared by Leave so a reload stays on the join screen
 let holdTimer = null, holdTask = null, holdAt = 0, meetingSounded = false, lastAutoRoom = null, autoTaskId = null;
 let reconnectDelay = 800;
 
@@ -52,6 +53,7 @@ async function joinGame(fresh) {
   const director = $('#in-director').checked ? '1' : '0';
   const btn = $('#btn-join');
   btn.disabled = true;
+  resumeRoom = 'pending';   // re-enables the reconnect path after a Leave
   try {
     let code = '';
     if (!fresh) {
@@ -84,8 +86,11 @@ function connect(code) {
     onMsg(m);
   };
   ws.onclose = () => {
+    // Leave sets resumeRoom = ''; a socket closing after that must not
+    // reconnect and drag the player back into the game.
+    if (!resumeRoom) return;
     toast('Disconnected - retrying...', 'bad');
-    setTimeout(() => connect(code), reconnectDelay);
+    setTimeout(() => { if (resumeRoom) connect(code); }, reconnectDelay);
     reconnectDelay = Math.min(reconnectDelay * 1.6, 15000);
   };
   ws.onopen = () => { reconnectDelay = 800; };
@@ -95,6 +100,16 @@ function connect(code) {
 // forget the room so a reload shows the join screen.
 function leaveGame() {
   try { localStorage.removeItem('hi-pid'); localStorage.removeItem('hi-room'); } catch {}
+  // Stop the resume path from firing: without this the next load sees the old
+  // room in storage and walks straight back into the game you just left.
+  resumeRoom = '';
+  // Clear every overlay, or a game-over / meeting card stays on top of the
+  // join screen and swallows the taps - that is what "Leave game does nothing"
+  // looked like.
+  for (const id of ['#scr-over', '#scr-meeting', '#reveal', '#taskgame', '#menu']) {
+    const el = $(id); if (el) { el.hidden = true; }
+  }
+  closeTask();
   me = null; S = null;
   if (ws) { ws.onclose = null; try { ws.close(); } catch {} ws = null; }
   $('#menu').hidden = true;
@@ -114,10 +129,10 @@ function onMsg(m) {
       $('#scr-join').hidden = true;
       $('#scr-game').hidden = false;
       // A director only watches: no beacons, no BLE permission, no scanning.
-      if (!me.director) {
-        autoReconnectBeacons();   // silently re-attach to beacons this phone already paired
-        if (!scanArmed) armScan();   // re-arm the room scan after a refresh
-      }
+      // A director only watches: no beacons, no BLE permission, no scanning.
+      // armScan() is deliberately NOT called here even for players - Chrome
+      // wants it inside a tap, and the Join click already did that.
+      if (!me.director) autoReconnectBeacons();
       break;
     case 'state': S = m; render(); break;
     case 'pong': break;
@@ -183,6 +198,7 @@ function maybeReveal() {
   revealShown = true; revealFor = you.role;
   const r = $('#reveal');
   r.className = you.role;
+  r.style.zIndex = 45;   // above the game-over card, so it can never sit over its button
   $('#reveal-crew').style.setProperty('--c', you.role === 'impostor' ? '#ff4d5e' : crewColor(me.id));
   $('#reveal-role').textContent = you.role === 'impostor' ? 'The Impostor' : 'Crewmate';
   $('#reveal-hint').textContent = you.role === 'impostor'
@@ -273,6 +289,9 @@ function renderFloorplan() {
   fp.innerHTML = '';
   const here = you.room;
   const dir = !!me.director;
+  // A director has no position, so "you are here" would be meaningless - and
+  // you would be the only person in that room, which reads as a bug.
+  const showHere = !dir && !!here;
   for (const f of S.house.floors) {
     const rooms = S.house.rooms.filter((r) => r.floor === f.id);
     if (!rooms.length) continue;
@@ -287,7 +306,7 @@ function renderFloorplan() {
       const locked = !dir && you.moveTo && !you.moveTo.includes(r.id) && r.id !== here && !r.lobby && S.state === 'playing';
       // `here` is written from the live snapshot, never from a stale flag, so a
       // room you just left cannot keep the ring.
-      const isHere = !!here && r.id === here;
+      const isHere = showHere && r.id === here;
       return `<div class="room ${isHere ? 'here' : ''} ${locked ? 'locked' : ''}" data-r="${esc(r.id)}"${isHere ? ' aria-current="true"' : ''}>
         <span class="nm">${esc(r.name)}</span>${bodies.length ? '<span class="body">💀</span>' : ''}
         <div class="dots">${dots}</div></div>`;
@@ -306,7 +325,7 @@ function renderPeople() {
       (a.alive === b.alive ? 0 : a.alive ? -1 : 1) || String(a.room).localeCompare(String(b.room)));
     el.innerHTML = all.length
       ? all.map((p) => `<div class="person"><span class="who">${crew(p.id, !p.alive)}${esc(p.name)}
-          <span class="sub">${esc(roomName(p.room))}</span>
+          <span class="sub">${p.room ? esc(roomName(p.room)) : 'not placed'}</span>
           ${p.role ? `<i class="pill ${p.role}">${p.role}</i>` : ''}</span>
           ${p.alive ? '' : '<span class="pill dead">out</span>'}</div>`).join('')
       : '<p class="sub">Nobody has joined yet.</p>';
@@ -1047,6 +1066,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const savedRoom = (localStorage.getItem('hi-room') || '').toUpperCase();
   const savedPid = localStorage.getItem('hi-pid') || '';
   if (savedRoom && savedPid) {
+    resumeRoom = savedRoom;
     $('#in-code').value = savedRoom;
     $('#in-director').checked = localStorage.getItem('hi-director') === '1';
     $('#scr-join').hidden = true;
@@ -1060,7 +1080,8 @@ window.addEventListener('DOMContentLoaded', () => {
   // give the exact one-time steps instead of a vague "use another browser".
   const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  if (!('bluetooth' in navigator)) {
+  // Directors never touch Bluetooth, so the whole warning is noise for them.
+  if (!('bluetooth' in navigator) && !$('#in-director').checked) {
     $('#ble-warn').hidden = false;
     if (iOS) {
       $('#ble-warn').innerHTML =
@@ -1087,6 +1108,12 @@ window.addEventListener('DOMContentLoaded', () => {
   // no extra tap, and it survives the await in joinGame.
   // armScan runs inside the click gesture, but only for players - a director
   // never touches Bluetooth, so the phone does not even ask for permission.
+  // Ticking Director drops the Bluetooth warning; unticking brings it back.
+  $('#in-director').addEventListener('change', () => {
+    const warn = $('#ble-warn');
+    if ($('#in-director').checked) warn.hidden = true;
+    else if (!('bluetooth' in navigator)) warn.hidden = false;
+  });
   $('#btn-join').addEventListener('click', () => { if (!$('#in-director').checked) armScan(); joinGame(false); });
   $('#btn-new').addEventListener('click', () => { if (!$('#in-director').checked) armScan(); joinGame(true); });
   $('#btn-menu').addEventListener('click', () => {
@@ -1108,6 +1135,8 @@ window.addEventListener('DOMContentLoaded', () => {
   $('#btn-start').addEventListener('click', () => send({ t: 'start', level: $('#sel-level').value }));
   $('#btn-reset').addEventListener('click', () => send({ t: 'reset' }));
   $('#btn-again').addEventListener('click', () => {
+    // Guard against a missing snapshot: a throw here is a dead button.
+    if (!S) { leaveGame(); return; }
     if (me && me.id === S.hostId) send({ t: 'reset' });
     else leaveGame();
   });
