@@ -1203,17 +1203,15 @@ window.addEventListener('DOMContentLoaded', () => {
     if (me && me.id === S.hostId) send({ t: 'reset' });
     else leaveGame();
   });
-  // "Back to lobby" is the only button on the game-over card, so a host who
-  // needs one more player had no way to learn that and just bounced back out.
-  // Check it before leaving, not after.
-  $('#btn-again').addEventListener('click', (ev) => {
+  // "Back to lobby" is the only button on the game-over card. It must ALWAYS
+  // work - a host with too few players still needs to get out of the card, so
+  // the shortfall is only a warning, never a block. (It used to cancel the
+  // click, which stranded the host on the card.)
+  $('#btn-again').addEventListener('click', () => {
     if (!S || !me || me.id !== S.hostId) return;
     const n = (S.people || []).filter((p) => p.alive).length;
-    if (n < 3) {
-      ev.stopImmediatePropagation();
-      toast(`You need ${3 - n} more player${3 - n === 1 ? '' : 's'} before a round can start.`, 'bad', 6000);
-    }
-  }, true);
+    if (n < 3) toast(`Back in the lobby - you need ${3 - n} more player${3 - n === 1 ? '' : 's'} to start.`, 'bad', 6000);
+  });
   $('#btn-takeover').addEventListener('click', () => send({ t: 'host' }));
   $('#btn-report').addEventListener('click', () => send({ t: 'report' }));
   $('#btn-emergency').addEventListener('click', () => send({ t: 'emergency' }));
@@ -1245,7 +1243,20 @@ window.addEventListener('DOMContentLoaded', () => {
   // kill cooldown ticks locally; the button only re-renders on a state push
   setInterval(() => { if (S && S.state === 'playing' && S.you && S.you.role === 'impostor') renderPeople(); }, 1000);
   // heartbeat so the server can tell a closed tunnel from a live phone
-  setInterval(() => { if (ws && ws.readyState === 1) send({ t: 'ping' }); }, 25000);
+  // Heartbeat. Chrome and Safari both throttle timers in a backgrounded tab,
+  // and the server reaps a player after 90 s of silence - which is what ended
+  // a round the moment somebody switched apps. Two defences: a short timer,
+  // and a ping on every wake-up (visibility, focus, pageshow, resume).
+  const beat = () => { if (ws && ws.readyState === 1) send({ t: 'ping' }); };
+  setInterval(beat, 15000);
+  for (const ev of ['visibilitychange', 'focus', 'pageshow', 'resume', 'online']) {
+    window.addEventListener(ev, () => { if (!document.hidden) beat(); });
+  }
+  // A phone that slept through the grace period reconnects on wake instead of
+  // sitting on a dead socket.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && resumeRoom && (!ws || ws.readyState > 1)) connect(resumeRoom);
+  });
   // keep screen awake during a round (iOS freezes BLE when the screen sleeps)
   document.addEventListener('visibilitychange', () => { if (!document.hidden && ws && ws.readyState === 1) { send({ t: 'ping' }); if (scanArmed) reportScan(); } });
 });

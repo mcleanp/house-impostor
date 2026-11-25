@@ -511,6 +511,7 @@ function startGame(room, levelId) {
   room.votes.clear();
   room.emergencyUsed.clear();
   room.overSent = false;
+  room.heldWin = false;
   roomEvent(room, { type: 'start', text: `Round started on "${(HOUSE.levels.find((l) => l.id === levelId) || {}).name}". Doors are live.` });
   return null;
 }
@@ -607,6 +608,7 @@ function checkWin(room) {
   // room to 'over' with a crew win before a game had ever started.
   if (room.state !== 'playing' && room.state !== 'meeting') return;
   if (room.state === 'over') return;
+  if (room.heldWin) return;   // a phone dropped; wait for it to come back
   const alive = alivePlayers(room);
   const imp = alive.filter((p) => p.role === 'impostor');
   const crew = alive.filter((p) => p.role === 'crew');
@@ -999,6 +1001,9 @@ server.on('upgrade', (req, socket) => {
   if (!room.hostId && !director) room.hostId = id;
   room.players.set(id, player);
   if (!room.order.includes(id)) room.order.push(id);
+  // Someone came back: lift the held win and re-test, so the round resumes
+  // rather than staying frozen on a drop that has since healed.
+  if (room.heldWin) { room.heldWin = false; checkWin(room); }
   conn.send({ t: 'welcome', id, code: room.code, hostId: room.hostId, name, director, color: player.color });
   conn.send(snapshotFor(room, player));
   roomEvent(room, { type: 'join', text: `${name}${director ? ' (director)' : ''} ${prev ? 'rejoined' : 'joined'} (${alivePlayers(room).length} playing).` });
@@ -1029,7 +1034,12 @@ server.on('upgrade', (req, socket) => {
       if (room.players.size === 0) { rooms.delete(room.code); return; }
       roomEvent(room, { type: 'leave', text: `${name} disconnected.` });
       if (room.state === 'meeting' && room.votes.size >= alivePlayers(room).length) endMeeting(room);
-      checkWin(room);
+      // Mid-round, a drop is not a loss: the player is kept in the game and
+      // only the win test is held off, so a phone that comes back rejoins the
+      // same round. `checkWin` would otherwise call "not enough crew" the
+      // instant one phone went to the home screen.
+      if (room.state === 'playing') room.heldWin = true;
+      else checkWin(room);
       broadcastState(room);
     }, 4000);
   };
@@ -1045,7 +1055,10 @@ setInterval(() => {
   // runs the normal disconnect cleanup (and GCs an empty game room).
   for (const room of rooms.values()) {
     for (const p of [...room.players.values()]) {
-      if (now - (p.lastSeen || 0) > 90000) p.conn._dead();
+      // 3 minutes, not 90 s: a phone that sleeps or switches app can be silent
+      // that long, and reaping it mid-round ended the game. The client now also
+      // pings on every wake-up, so this is only the backstop for a real ghost.
+      if (now - (p.lastSeen || 0) > 180000) p.conn._dead();
     }
   }
   for (const room of rooms.values()) {
