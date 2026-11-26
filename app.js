@@ -262,11 +262,15 @@ function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
  * everyone else's. `now` rides on each snapshot, so the offset is measured and
  * applied instead of trusting the handset clock. */
 let clockSkew = 0;
+let skewFrom = 0;   // the S.now the skew was measured against
 function serverNow() { return Date.now() + clockSkew; }
 
 function render() {
   if (!S || !me) return;
-  if (S.now) clockSkew = S.now - Date.now();
+  // Only re-measure on a NEW snapshot. S.now is a fixed stamp, so recomputing
+  // on every render (renders outpace snapshots) walked the skew backwards and
+  // every countdown drifted behind the real deadline.
+  if (S.now && S.now !== skewFrom) { skewFrom = S.now; clockSkew = S.now - Date.now(); }
   me.hostId = S.hostId;
   $('#h-code').textContent = S.code;
   $('#btn-menu').textContent = S.state + ' ▾';
@@ -295,7 +299,10 @@ function render() {
   // Walking into a room with an unfinished task pops it up by itself.
   // Not while the role card is up: the task used to open underneath it, so the
   // player never saw their own role (and the impostor never learned they were it).
+  // Also hold it for a moment after the start: a stray tap can dismiss the role
+  // card instantly, and the task would then cover the round's first seconds.
   if (S.state === 'playing' && you.alive && !me.director && $('#reveal').hidden
+      && serverNow() - (S.startedAt || 0) > 1500
       && !taskOpen && !autoTaskId && you.room && you.room !== lastAutoRoom) {
     lastAutoRoom = you.room;
     const t = (you.tasks || []).find((x) => !x.done && x.room === you.room);
@@ -405,10 +412,12 @@ function renderPeople() {
     ? here.map((p) => `<div class="person"><span class="who">${crew(p.id, !p.alive)}${esc(p.name)} ${p.alive ? '' : '(down)'}${p.role ? ` <i>${p.role}</i>` : ''}</span>
         ${you.role === 'impostor' && p.alive && you.alive ? (() => {
           const wait = Math.ceil(((S.killReadyAt || 0) - serverNow()) / 1000);
-          if (wait > 0) return `<button class="danger" disabled>Kill ${wait}s</button>`;
+          const can = wait <= 0;
           const d = S.delayKillS || 0;
-          return `<span class="kbtns"><button class="danger" data-kill="${p.id}">Kill</button>`
-            + (d > 0 ? `<button class="ghost" data-killd="${p.id}">Delay ${d}s</button>` : '') + '</span>';
+          // Both stay visible through the cooldown, greyed out - the delay used
+          // to disappear until the timer ended, which read as "not allowed".
+          return `<span class="kbtns"><button class="danger" ${can ? '' : 'disabled'} data-kill="${can ? p.id : ''}">${wait > 0 ? `Kill ${wait}s` : 'Kill'}</button>`
+            + (d > 0 ? `<button class="ghost" ${can ? '' : 'disabled'} data-killd="${can ? p.id : ''}">Delay ${d}s</button>` : '') + '</span>';
         })() : ''}</div>`).join('')
     : '<p class="sub">Nobody. Spooky.</p>';
   el.querySelectorAll('[data-kill]').forEach((b) => b.addEventListener('click', () => send({ t: 'kill', victim: b.dataset.kill, kind: 'kill' })));
@@ -451,10 +460,12 @@ function renderKill() {
   box.innerHTML = others.map((p) => {
     const inRoom = p.room === you.room;
     const can = inRoom && wait <= 0;
-    const btns = can
-      ? `<button class="danger" data-kill2="${p.id}">Kill</button>`
-        + (d > 0 ? `<button class="ghost" data-delay="${p.id}">Delay ${d}s</button>` : '')
-      : `<button class="danger" disabled>${inRoom ? `Kill ${wait}s` : 'Go there'}</button>`;
+    // Both options stay on screen through the cooldown, greyed out, so the
+    // delay is visibly available instead of vanishing until the timer ends.
+    const btns = !inRoom
+      ? '<button class="danger" disabled>Go there</button>'
+      : `<button class="danger" ${can ? '' : 'disabled'} data-kill2="${can ? p.id : ''}">${wait > 0 ? `Kill ${wait}s` : 'Kill'}</button>`
+        + (d > 0 ? `<button class="ghost" ${can ? '' : 'disabled'} data-delay="${can ? p.id : ''}">Delay ${d}s</button>` : '');
     return `<div class="person"><span class="who">${crew(p.id, true)}${esc(p.name)}
       <span class="sub">${p.room ? esc(roomName(p.room)) : 'not placed'}${inRoom ? ' - with you' : ''}</span></span>
       <span class="kbtns">${btns}</span></div>`;
@@ -1139,7 +1150,7 @@ async function restartLescan() {
 
 // Bumped whenever the client changes. It travels on every diag line, so a log
 // can never again be ambiguous about which version a phone is running.
-const BUILD = 'ui33';
+const BUILD = 'ui34';
 
 // Fire-and-forget note to the server so we can read what the phone did.
 function diag(o) {
