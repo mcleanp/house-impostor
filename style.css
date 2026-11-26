@@ -135,18 +135,6 @@ header b{font-family:ui-monospace,monospace;letter-spacing:.2em;color:var(--gold
 .crew.big::before{border-radius:26px 26px 10px 10px;box-shadow:inset 0 0 0 5px rgba(0,0,0,.35)}
 .crew.big::after{left:-14px;top:20px;width:18px;height:34px;border-radius:10px;box-shadow:inset 0 0 0 5px rgba(0,0,0,.35)}
 
-/* lobby: the crew lined up before the round */
-.lobby-crew{
-  display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;align-items:flex-end;
-  padding:.8rem .6rem;margin:.7rem 0;border:2px dashed var(--line);border-radius:16px;
-  background:radial-gradient(600px 120px at 50% 100%, rgba(56,189,248,.16), transparent 70%);
-}
-.lobby-crew .crew{width:22px;height:28px;animation:bob 2.4s ease-in-out infinite alternate}
-.lobby-crew .crew:nth-child(2n){animation-delay:-.8s}
-.lobby-crew .crew:nth-child(3n){animation-delay:-1.6s}
-@keyframes bob{from{transform:translateY(0)}to{transform:translateY(-5px)}}
-@media (prefers-reduced-motion:reduce){.lobby-crew .crew{animation:none}}
-
 /* -------------------------------------------------------------- floorplan */
 #floorplan{
   display:flex;flex-direction:column-reverse;gap:.5rem;margin:.7rem 0;
