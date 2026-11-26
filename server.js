@@ -34,6 +34,7 @@ const RULES = {
   MOVE_COOLDOWN_S: 3,       // per door-traversal; stops teleport-cheese
   KILL_COOLDOWN_S: 45,
   POST_MEETING_COOLDOWN_S: 20,
+  HELD_WIN_GRACE_S: 60,     // a dropped phone holds the win test this long, then it runs
   MEETING_S: 60,            // default; the host can change it in Setup (house.settings)
   GATHER_S: 45,             // emergency: seconds to walk to the gather room first
   GATHER_ROOM: 'room',      // default gather room (the dining room)
@@ -714,7 +715,15 @@ function checkWin(room) {
   // room to 'over' with a crew win before a game had ever started.
   if (room.state !== 'playing' && room.state !== 'meeting') return;
   if (room.state === 'over') return;
-  if (room.heldWin) return;   // a phone dropped; wait for it to come back
+  // A phone dropped: wait for it to come back - but only while the numbers
+  // still say the round is alive. A kill or an ejection is hard evidence and
+  // has to end the round even if someone's phone is asleep in their pocket.
+  if (room.heldWin) {
+    const live = alivePlayers(room);
+    const impLive = live.filter((p) => p.role === 'impostor');
+    const crewLive = live.filter((p) => p.role === 'crew');
+    if (impLive.length && crewLive.length > impLive.length && taskProgress(room) < 1) return;
+  }
   const alive = alivePlayers(room);
   const imp = alive.filter((p) => p.role === 'impostor');
   const crew = alive.filter((p) => p.role === 'crew');
@@ -1158,8 +1167,18 @@ server.on('upgrade', (req, socket) => {
       // only the win test is held off, so a phone that comes back rejoins the
       // same round. `checkWin` would otherwise call "not enough crew" the
       // instant one phone went to the home screen.
-      if (room.state === 'playing') room.heldWin = true;
-      else checkWin(room);
+      if (room.state === 'playing') {
+        room.heldWin = true;
+        // The flag is only lifted by a rejoin. A phone that never comes back
+        // used to freeze the win test for the rest of the round, so re-test
+        // once the grace has elapsed.
+        setTimeout(() => {
+          if (!room.heldWin || room.state !== 'playing') return;
+          room.heldWin = false;
+          checkWin(room);
+          broadcastState(room);
+        }, RULES.HELD_WIN_GRACE_S * 1000).unref();
+      } else checkWin(room);
       broadcastState(room);
     }, 4000);
   };
@@ -1205,6 +1224,9 @@ setInterval(() => {
         roomEvent(room, { type: 'kill', text: `${by ? by.name : 'The impostor'} killed ${v.name}.` });
         try { v.conn.send({ t: 'died', by: by ? by.name : 'the impostor', room: k.room }); } catch {}
         dirty = true;
+        // A delayed kill can leave the last crew dead - test it here or the
+        // round runs on forever with one crew and one impostor.
+        checkWin(room);
       }
     }
     if (room.state === 'playing' || room.state === 'lobby') {
