@@ -393,10 +393,14 @@ function renderPeople() {
     ? here.map((p) => `<div class="person"><span class="who">${crew(p.id, !p.alive)}${esc(p.name)} ${p.alive ? '' : '(down)'}${p.role ? ` <i>${p.role}</i>` : ''}</span>
         ${you.role === 'impostor' && p.alive && you.alive ? (() => {
           const wait = Math.ceil(((S.killReadyAt || 0) - serverNow()) / 1000);
-          return wait > 0 ? `<button class="danger" disabled>Kill ${wait}s</button>` : `<button class="danger" data-kill="${p.id}">Kill</button>`;
+          if (wait > 0) return `<button class="danger" disabled>Kill ${wait}s</button>`;
+          const d = S.delayKillS || 0;
+          return `<span class="kbtns"><button class="danger" data-kill="${p.id}">Kill</button>`
+            + (d > 0 ? `<button class="ghost" data-killd="${p.id}">Delay ${d}s</button>` : '') + '</span>';
         })() : ''}</div>`).join('')
     : '<p class="sub">Nobody. Spooky.</p>';
-  el.querySelectorAll('[data-kill]').forEach((b) => b.addEventListener('click', () => send({ t: 'kill', victim: b.dataset.kill })));
+  el.querySelectorAll('[data-kill]').forEach((b) => b.addEventListener('click', () => send({ t: 'kill', victim: b.dataset.kill, kind: 'kill' })));
+  el.querySelectorAll('[data-killd]').forEach((b) => b.addEventListener('click', () => send({ t: 'kill', victim: b.dataset.killd, kind: 'delay' })));
 
   const mv = $('#move');
   mv.innerHTML = '';
@@ -1123,7 +1127,7 @@ async function restartLescan() {
 
 // Bumped whenever the client changes. It travels on every diag line, so a log
 // can never again be ambiguous about which version a phone is running.
-const BUILD = 'ui31';
+const BUILD = 'ui32';
 
 // Fire-and-forget note to the server so we can read what the phone did.
 function diag(o) {
