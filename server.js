@@ -605,7 +605,9 @@ function killPlayer(room, killer, victimId, kind) {
     // The victim keeps walking for `delay` more seconds - that is the whole
     // point: the impostor is already gone when the body appears.
     room.pendingKills.push({ room: killer.room, victimId, byId: killer.id, at: Date.now() + delay * 1000 });
-    v.conn.send({ t: 'nope', text: `You have been marked - it lands in ${delay}s.` });
+    // The victim is NOT told: knowing a kill is queued tells them an impostor
+    // was standing in their room, which narrows down who it was. Only the
+    // impostor gets a confirmation.
     killer.conn.send({ t: 'nope', text: `Kill set on ${v.name} in the ${roomById(killer.room).name} - it lands in ${delay}s. Walk away.` });
     return null;
   }
@@ -782,7 +784,6 @@ function snapshotFor(room, p) {
       role: room.state === 'lobby' ? undefined : p.role,
       tasks: me ? (p.tasks || []) : undefined,
       roomSource: p.roomSource,
-      marked: room.pendingKills.some((k) => k.victimId === p.id),
       beaconRoom: resolveRoom(p.id),
       moveTo: p.alive ? neighbours(p.room).filter((id) => levelRooms(room).has(id)) : [],
       emergencyLeft: room.state === 'playing' && p.alive

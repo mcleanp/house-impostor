@@ -174,7 +174,8 @@ function onMsg(m) {
       break;
     }
     case 'died':
-      toast(`You are dead. Walk to the lobby. (${m.room})`, 'bad', 8000);
+      // No killer, no room: naming either narrows down who the impostor was.
+      toast('You are dead.', 'bad', 8000);
       if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
       blip('kill');
       break;
@@ -320,8 +321,6 @@ function render() {
   $('#btn-kill').hidden = !canKill;
   if (!canKill) $('#panel-kill').hidden = true;
   if (canKill && !$('#panel-kill').hidden) renderKill();
-  const markedEl = $('#marked');
-  markedEl.hidden = !(playing && you.marked);
   $('#btn-emergency').hidden = !playing;
   $('#btn-emergency').disabled = !you.emergencyLeft;
   $('#btn-emergency').textContent = you.emergencyLeft > 1 ? `Emergency (${you.emergencyLeft})` : 'Emergency';
@@ -1142,7 +1141,7 @@ async function restartLescan() {
 
 // Bumped whenever the client changes. It travels on every diag line, so a log
 // can never again be ambiguous about which version a phone is running.
-const BUILD = 'ui37';
+const BUILD = 'ui38';
 
 // Fire-and-forget note to the server so we can read what the phone did.
 function diag(o) {
