@@ -11,6 +11,11 @@ let holdTimer = null, holdTask = null, holdAt = 0, meetingSounded = false, lastA
 // Set when the page is reloaded mid-round: you are already standing in a room,
 // so the first snapshot must not count as walking into it.
 let resumed = false;
+// When the role card was dismissed. The auto-open waits on THIS, not on the
+// round start: reading the card takes longer than any fixed start delay, so a
+// start-based timer had already expired by the time anyone tapped.
+let revealClosedAt = 0;
+const REVEAL_GRACE_MS = 1200;
 let reconnectDelay = 800;
 
 /* ------------------------------------------------------------------ toast */
@@ -251,6 +256,7 @@ function maybeReveal() {
 }
 $('#reveal').addEventListener('click', () => {
   $('#reveal').hidden = true;
+  revealClosedAt = Date.now();
   // Re-render at once: the auto-open is gated on the card being gone, and
   // waiting for the next snapshot left a dead pause with nothing happening.
   if (S) render();
@@ -309,10 +315,10 @@ function render() {
   // Walking into a room with an unfinished task pops it up by itself.
   // Not while the role card is up: the task used to open underneath it, so the
   // player never saw their own role (and the impostor never learned they were it).
-  // Also hold it for a moment after the start: a stray tap can dismiss the role
-  // card instantly, and the task would then cover the round's first seconds.
+  // Also hold it for a moment after the card is dismissed: a stray tap can
+  // dismiss it instantly, and the task would then cover the role you just got.
   if (S.state === 'playing' && you.alive && !me.director && $('#reveal').hidden
-      && serverNow() - (S.startedAt || 0) > 1500
+      && Date.now() - revealClosedAt > REVEAL_GRACE_MS
       && !taskOpen && !autoTaskId && you.room && you.room !== lastAutoRoom) {
     lastAutoRoom = you.room;
     const t = (you.tasks || []).find((x) => !x.done && x.room === you.room);
@@ -1162,7 +1168,7 @@ async function restartLescan() {
 
 // Bumped whenever the client changes. It travels on every diag line, so a log
 // can never again be ambiguous about which version a phone is running.
-const BUILD = 'ui35';
+const BUILD = 'ui36';
 
 // Fire-and-forget note to the server so we can read what the phone did.
 function diag(o) {
