@@ -7,13 +7,9 @@ const CFG = window.CFG || {};
 let ws = null, me = null, S = null;   // S = last server snapshot
 let resumeRoom = '';
 let scanTried = false;   // per connection: arm the scan once, never in a loop   // set at boot; cleared by Leave so a reload stays on the join screen
-let holdTimer = null, holdTask = null, holdAt = 0, meetingSounded = false, lastAutoRoom = null, autoTaskId = null;
-// Set when the page is reloaded mid-round: you are already standing in a room,
-// so the first snapshot must not count as walking into it.
-let resumed = false;
-// When the role card was dismissed. The auto-open waits on THIS, not on the
-// round start: reading the card takes longer than any fixed start delay, so a
-// start-based timer had already expired by the time anyone tapped.
+let holdTimer = null, holdTask = null, holdAt = 0, meetingSounded = false;
+// When the role card was dismissed - a task tap inside this window is ignored,
+// because the tap that closed the card also lands on whatever is underneath.
 let revealClosedAt = 0;
 const REVEAL_GRACE_MS = 1200;
 let reconnectDelay = 800;
@@ -305,31 +301,6 @@ function render() {
   if (S.state !== 'meeting') meetingSounded = false;
 
   maybeReveal();
-  // A reload lands you already inside a room - seed the "last room" so its task
-  // does not pop open by itself. Cleared once the round is running, or at once
-  // if the round has not started yet (then the normal start behaviour applies).
-  if (resumed) {
-    if (S.state === 'playing' && you.room) { lastAutoRoom = you.room; resumed = false; }
-    else if (S.state !== 'playing') resumed = false;
-  }
-  // Walking into a room with an unfinished task pops it up by itself.
-  // Not while the role card is up: the task used to open underneath it, so the
-  // player never saw their own role (and the impostor never learned they were it).
-  // Also hold it for a moment after the card is dismissed: a stray tap can
-  // dismiss it instantly, and the task would then cover the role you just got.
-  if (S.state === 'playing' && you.alive && !me.director && $('#reveal').hidden
-      && Date.now() - revealClosedAt > REVEAL_GRACE_MS
-      && !taskOpen && !autoTaskId && you.room && you.room !== lastAutoRoom) {
-    lastAutoRoom = you.room;
-    const t = (you.tasks || []).find((x) => !x.done && x.room === you.room);
-    if (t) {
-      autoTaskId = t.id;
-      setTimeout(() => {
-        if (!taskOpen && S && S.you && S.you.room === t.room) openTask(t.id);
-        autoTaskId = null;
-      }, 400);
-    }
-  }
 
   $('#scr-meeting').hidden = S.state !== 'meeting';
   if (S.state !== 'meeting') voteBuilt = false;
@@ -496,7 +467,7 @@ function renderTasks() {
   const you = S.you || {};
   const list = you.tasks || [];
   $('#panel-tasks').hidden = !(list.length && S.state === 'playing' && you.alive);
-  $('#holdhint').textContent = 'tap a task in its room';
+  $('#holdhint').textContent = 'tap a task in its room to open it';
   $('#tasks').innerHTML = list.map((t) => {
     const inRoom = t.room === you.room;
     return `<div class="task ${t.done ? 'done' : ''}">
@@ -526,6 +497,9 @@ function openTask(id) {
   if (!t || t.done) return;
   if (t.room !== (S.you.room || '')) { toast(`That task is in the ${roomName(t.room)} - go there first.`, 'bad'); return; }
   if (taskOpen) return;
+  // The tap that closes the role card also lands on the Open button underneath
+  // it, which started a task nobody asked for. Ignore taps for a moment after.
+  if (Date.now() - revealClosedAt < REVEAL_GRACE_MS) return;
   taskOpen = { task: t, at: Date.now(), done: false };
   send({ t: 'taskStart', id });
   $('#tg-title').textContent = t.name;
@@ -1168,7 +1142,7 @@ async function restartLescan() {
 
 // Bumped whenever the client changes. It travels on every diag line, so a log
 // can never again be ambiguous about which version a phone is running.
-const BUILD = 'ui36';
+const BUILD = 'ui37';
 
 // Fire-and-forget note to the server so we can read what the phone did.
 function diag(o) {
@@ -1441,7 +1415,6 @@ window.addEventListener('DOMContentLoaded', () => {
   const savedPid = localStorage.getItem('hi-pid') || '';
   if (savedRoom && savedPid) {
     resumeRoom = savedRoom;
-    resumed = true;
     $('#in-code').value = savedRoom;
     $('#in-director').checked = localStorage.getItem('hi-director') === '1';
     $('#scr-join').hidden = true;
