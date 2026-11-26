@@ -748,6 +748,7 @@ function snapshotFor(room, p) {
     level: room.levelId,
     code: room.code, hostId: room.hostId,
     state: room.state,
+    startedAt: room.startedAt || 0,
     now: Date.now(),
     killReadyAt: room.killReadyAt, meetingEnds: room.meetingEnds, meetingS: meetingSeconds(),
     voteEnds: room.voteEnds || 0, voteS: voteSeconds(),
