@@ -247,8 +247,16 @@ $('#reveal').addEventListener('click', () => { $('#reveal').hidden = true; });
 function roomName(id) { const r = S && S.house.rooms.find((x) => x.id === id); return r ? r.name : id; }
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
+/* Phones' clocks drift from the server's, and every countdown is a server
+ * deadline. Without this the impostor's phone could show a different number to
+ * everyone else's. `now` rides on each snapshot, so the offset is measured and
+ * applied instead of trusting the handset clock. */
+let clockSkew = 0;
+function serverNow() { return Date.now() + clockSkew; }
+
 function render() {
   if (!S || !me) return;
+  if (S.now) clockSkew = S.now - Date.now();
   me.hostId = S.hostId;
   $('#h-code').textContent = S.code;
   $('#btn-menu').textContent = S.state + ' ▾';
@@ -311,6 +319,7 @@ function render() {
   $('#btn-emergency').hidden = !playing;
   $('#btn-emergency').disabled = !you.emergencyLeft;
   $('#btn-emergency').textContent = you.emergencyLeft > 1 ? `Emergency (${you.emergencyLeft})` : 'Emergency';
+  $('#btn-scan').textContent = manualMode ? 'Auto-detect room' : 'Pair my beacons';
 }
 
 function renderFloorplan() {
@@ -352,7 +361,12 @@ function renderFloorplan() {
   if (S.state === 'playing' && you.alive && !dir) {
     fp.querySelectorAll('.room[data-r]').forEach((el) => {
       if (!el.classList.contains('go')) return;
-      el.addEventListener('click', () => send({ t: 'move', room: el.dataset.r }));
+      el.addEventListener('click', () => {
+        send({ t: 'move', room: el.dataset.r });
+        // the tap is the player's own word - stop re-asserting the picked board,
+        // or the next heartbeat would drag them straight back to it
+        if (manualMode) { manualMode = false; manualRoomId = ''; clearInterval(sampleTimer); scanArmed = false; }
+      });
     });
   }
 }
@@ -378,7 +392,7 @@ function renderPeople() {
   el.innerHTML = here.length
     ? here.map((p) => `<div class="person"><span class="who">${crew(p.id, !p.alive)}${esc(p.name)} ${p.alive ? '' : '(down)'}${p.role ? ` <i>${p.role}</i>` : ''}</span>
         ${you.role === 'impostor' && p.alive && you.alive ? (() => {
-          const wait = Math.ceil(((S.killReadyAt || 0) - Date.now()) / 1000);
+          const wait = Math.ceil(((S.killReadyAt || 0) - serverNow()) / 1000);
           return wait > 0 ? `<button class="danger" disabled>Kill ${wait}s</button>` : `<button class="danger" data-kill="${p.id}">Kill</button>`;
         })() : ''}</div>`).join('')
     : '<p class="sub">Nobody. Spooky.</p>';
@@ -391,7 +405,10 @@ function renderPeople() {
       const b = document.createElement('button');
       b.className = 'ghost';
       b.textContent = `→ ${roomName(id)}`;
-      b.addEventListener('click', () => send({ t: 'move', room: id }));
+      b.addEventListener('click', () => {
+        send({ t: 'move', room: id });
+        if (manualMode) { manualMode = false; manualRoomId = ''; clearInterval(sampleTimer); scanArmed = false; }
+      });
       mv.appendChild(b);
     }
     if (you.roomSource === 'beacon') mv.insertAdjacentHTML('beforeend', '<span class="sub">position from beacon RSSI</span>');
@@ -411,7 +428,7 @@ function renderKill() {
     box.innerHTML = '<p class="sub">No kill while the round is not running.</p>';
     return;
   }
-  const wait = Math.ceil(((S.killReadyAt || 0) - Date.now()) / 1000);
+  const wait = Math.ceil(((S.killReadyAt || 0) - serverNow()) / 1000);
   const others = (S.people || []).filter((p) => p.alive && p.id !== me.id);
   if (!others.length) { box.innerHTML = '<p class="sub">Nobody else is alive.</p>'; return; }
   const d = S.delayKillS || 0;
@@ -675,8 +692,8 @@ function renderMeeting() {
   const you = S.you || {};
   // An emergency opens a gather phase: walk to the room, the ballot is not
   // live yet. Same overlay, different heading.
-  const gathering = !!S.gatherEnds && Date.now() < S.gatherEnds;
-  const gsecs = gathering ? Math.max(0, Math.ceil((S.gatherEnds - Date.now()) / 1000)) : 0;
+  const gathering = !!S.gatherEnds && serverNow() < S.gatherEnds;
+  const gsecs = gathering ? Math.max(0, Math.ceil((S.gatherEnds - serverNow()) / 1000)) : 0;
   $('#m-title').textContent = gathering ? 'EMERGENCY' : 'MEETING';
   $('#m-go').hidden = !gathering;
   if (gathering) {
@@ -693,9 +710,9 @@ function renderMeeting() {
   // buttons are disabled rather than silently doing nothing.
   // The server flag is authoritative, but a countdown that has already run out
   // must open the ballot even if that one snapshot has not arrived yet.
-  const voteOpen = S.voteOpen || (S.voteEnds && Date.now() >= (S.meetingEnds || 0));
+  const voteOpen = S.voteOpen || (S.voteEnds && serverNow() >= (S.meetingEnds || 0));
   if (!voteOpen) {
-    const dsecs = Math.max(0, Math.ceil((S.meetingEnds - Date.now()) / 1000));
+    const dsecs = Math.max(0, Math.ceil((S.meetingEnds - serverNow()) / 1000));
     $('#m-title').textContent = 'DISCUSS';
     $('#m-go').hidden = false;
     $('#m-go').innerHTML = `Talk it out - voting opens in <b>${dsecs}s</b>`;
@@ -710,7 +727,7 @@ function renderMeeting() {
   }
   $('#m-title').textContent = 'VOTE';
   $('#m-go').hidden = true;
-  const secs = Math.max(0, Math.ceil((S.voteEnds - Date.now()) / 1000));
+  const secs = Math.max(0, Math.ceil((S.voteEnds - serverNow()) / 1000));
   $('#m-timer').textContent = secs;
   const bar = $('#m-bar');
   if (bar) bar.style.setProperty('--p', String(S.voteS ? Math.min(1, secs / S.voteS) : 1));
@@ -1106,7 +1123,7 @@ async function restartLescan() {
 
 // Bumped whenever the client changes. It travels on every diag line, so a log
 // can never again be ambiguous about which version a phone is running.
-const BUILD = 'ui30';
+const BUILD = 'ui31';
 
 // Fire-and-forget note to the server so we can read what the phone did.
 function diag(o) {
@@ -1124,6 +1141,14 @@ function diag(o) {
  * the welcome frame arms the scan the gesture is gone (SecurityError). So the
  * click calls this synchronously; armScan() then awaits the same promise. */
 let pickPromise = null;
+/* A board name is HB-<roomid>; the suffix is the room id. */
+function roomOfBoard(name) {
+  const n = String(name || '');
+  const prefix = CFG.BLE_PREFIX || 'HB-';
+  if (!n.startsWith(prefix)) return '';
+  return n.slice(prefix.length);
+}
+
 /* True when this browser can hear advertisements at all. Android Chrome ships
  * neither requestLEScan nor watchAdvertisements without
  * chrome://flags/#enable-experimental-web-platform-features, so those phones
@@ -1137,9 +1162,12 @@ function canHearAdverts() {
 
 function pickDevice() {
   if (pickPromise || !navigator.bluetooth || !navigator.bluetooth.requestDevice) return;
-  try {
-    pickPromise = navigator.bluetooth.requestDevice({ filters: [{ namePrefix: CFG.BLE_PREFIX || 'HB-' }] });
-  } catch (e) { pickPromise = Promise.reject(e); }
+  // A phone that cannot hear adverts is really choosing a room, so say so.
+  const filters = [{ namePrefix: CFG.BLE_PREFIX || 'HB-' }];
+  const opts = manualMode || !canHearAdverts()
+    ? { filters, optionalServices: [] } : { filters };
+  try { pickPromise = navigator.bluetooth.requestDevice(opts); }
+  catch (e) { pickPromise = Promise.reject(e); }
   pickPromise.catch(() => {});   // consumed in armScan; do not warn twice
 }
 
@@ -1420,11 +1448,27 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   $('#btn-join').addEventListener('click', () => { armForJoin(); joinGame(false); });
   $('#btn-new').addEventListener('click', () => { armForJoin(); joinGame(true); });
+  // The menu is a small pop-over. On a phone the only way out was the Close
+  // button, which is easy to miss and reads as a stuck box: any tap outside it,
+  // or a few seconds passing, now closes it too.
+  let menuTimer = null;
+  const closeMenu = () => {
+    $('#menu').hidden = true;
+    $('#btn-menu').setAttribute('aria-expanded', 'false');
+    clearTimeout(menuTimer);
+  };
   $('#btn-menu').addEventListener('click', () => {
     const open = $('#menu').hidden;
     $('#menu').hidden = !open;
     $('#btn-menu').setAttribute('aria-expanded', String(open));
+    clearTimeout(menuTimer);
+    if (open) menuTimer = setTimeout(closeMenu, 8000);
   });
+  document.addEventListener('pointerdown', (e) => {
+    if ($('#menu').hidden) return;
+    if (e.target.closest('#menu') || e.target.closest('#btn-menu')) return;
+    closeMenu();
+  }, { passive: true });
   // A kill needs the player in the same room, so the Kill panel shows every
   // player with their room and a button that is only live for the one you are
   // standing with. An impostor does not have to work out the fog of war.
@@ -1433,10 +1477,7 @@ window.addEventListener('DOMContentLoaded', () => {
     $('#panel-kill').hidden = !open;
     if (open) renderKill();
   });
-  $('#btn-menu-close').addEventListener('click', () => {
-    $('#menu').hidden = true;
-    $('#btn-menu').setAttribute('aria-expanded', 'false');
-  });
+  $('#btn-menu-close').addEventListener('click', closeMenu);
   $('#btn-leave').addEventListener('click', leaveGame);
   $('#tg-close').addEventListener('click', closeTask);
   $('#btn-copy').addEventListener('click', async () => {

@@ -400,7 +400,11 @@ function reresolveLive() {
         : resolveRoom(pl.id, pl.roomSource === 'beacon' ? pl.room : null);
       if (best) pl.lastGoodAt = Date.now();   // fresh evidence: reset the grace clock
       if (best && best !== pl.room) {
-        pl.room = best; pl.roomSource = 'beacon'; pl.movedAt = Date.now();
+        pl.room = best;
+        pl.roomSource = (man && man.room === best) ? 'manual' : 'beacon';
+        // A manual pick is a statement, not a walk - it must not arm the move
+        // cooldown, or the player's first door tap is refused as "too fast".
+        if (pl.roomSource !== 'manual') pl.movedAt = Date.now();
         dirty = true;
       } else if (!best && pl.roomSource === 'beacon' && pl.room
                  && Date.now() - (pl.lastGoodAt || 0) > RULES.ROOM_CLEAR_S * 1000) {
@@ -573,8 +577,12 @@ function movePlayer(room, p, to) {
   if (room.state !== 'playing') return 'Not during setup or a meeting.';
   if (!p.alive) return 'You are in the lobby - only ghosts and the living move.';
   const from = p.room;
-  if (to === from) return null;
   if (!levelRooms(room).has(to)) return 'That room is not in this level.';
+  // A tap is the player's own word, so it overrides a stale manual pick. Without
+  // this the manual room outranked every tap and the phone was pinned to the
+  // board it once picked.
+  manualRoom.delete(p.id);
+  if (to === from) return null;
   if (!neighbours(from).includes(to)) return 'There is no door from here to there.';
   const now = Date.now();
   if (now - (p.movedAt || 0) < RULES.MOVE_COOLDOWN_S * 1000) return 'Slow down - use the door like a human.';
