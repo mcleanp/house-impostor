@@ -8,6 +8,9 @@ let ws = null, me = null, S = null;   // S = last server snapshot
 let resumeRoom = '';
 let scanTried = false;   // per connection: arm the scan once, never in a loop   // set at boot; cleared by Leave so a reload stays on the join screen
 let holdTimer = null, holdTask = null, holdAt = 0, meetingSounded = false, lastAutoRoom = null, autoTaskId = null;
+// Set when the page is reloaded mid-round: you are already standing in a room,
+// so the first snapshot must not count as walking into it.
+let resumed = false;
 let reconnectDelay = 800;
 
 /* ------------------------------------------------------------------ toast */
@@ -296,6 +299,13 @@ function render() {
   if (S.state !== 'meeting') meetingSounded = false;
 
   maybeReveal();
+  // A reload lands you already inside a room - seed the "last room" so its task
+  // does not pop open by itself. Cleared once the round is running, or at once
+  // if the round has not started yet (then the normal start behaviour applies).
+  if (resumed) {
+    if (S.state === 'playing' && you.room) { lastAutoRoom = you.room; resumed = false; }
+    else if (S.state !== 'playing') resumed = false;
+  }
   // Walking into a room with an unfinished task pops it up by itself.
   // Not while the role card is up: the task used to open underneath it, so the
   // player never saw their own role (and the impostor never learned they were it).
@@ -444,6 +454,8 @@ function renderPeople() {
   // Show the room panel when the beacon has something to say, even in the
   // lobby (no people/move buttons there, but the beacon line matters).
   $('#panel-people').hidden = !(here.length || mv.children.length || you.beaconRoom);
+  // The walk hint only means something while the round is running.
+  $('#room-hint').hidden = S.state !== 'playing';
 }
 
 function renderKill() {
@@ -1150,7 +1162,7 @@ async function restartLescan() {
 
 // Bumped whenever the client changes. It travels on every diag line, so a log
 // can never again be ambiguous about which version a phone is running.
-const BUILD = 'ui34';
+const BUILD = 'ui35';
 
 // Fire-and-forget note to the server so we can read what the phone did.
 function diag(o) {
@@ -1423,6 +1435,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const savedPid = localStorage.getItem('hi-pid') || '';
   if (savedRoom && savedPid) {
     resumeRoom = savedRoom;
+    resumed = true;
     $('#in-code').value = savedRoom;
     $('#in-director').checked = localStorage.getItem('hi-director') === '1';
     $('#scr-join').hidden = true;
