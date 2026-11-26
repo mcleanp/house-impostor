@@ -223,12 +223,17 @@ function blip(kind) {
 }
 
 // Role reveal: shown once per round, tap to dismiss.
-let revealFor = null, revealShown = false;
+let revealFor = null, revealShown = false, revealRound = 0;
 function maybeReveal() {
   const you = (S && S.you) || {};
-  if (S.state !== 'playing' || !you.role || me.director) { if (S.state !== 'playing') revealShown = false; return; }
-  if (revealShown && revealFor === you.role) return;
-  revealShown = true; revealFor = you.role;
+  if (S.state !== 'playing' || !you.role || me.director) {
+    // A new round starts with a fresh start time; only then may the card show
+    // again. Clearing on any non-playing frame re-showed it on every lobby tick.
+    if (S.state !== 'playing') revealShown = false;
+    return;
+  }
+  if (revealShown && revealFor === you.role && revealRound === S.startedAt) return;
+  revealShown = true; revealFor = you.role; revealRound = S.startedAt;
   const r = $('#reveal');
   r.className = you.role;
   r.style.zIndex = 45;   // above the game-over card, so it can never sit over its button
@@ -241,7 +246,12 @@ function maybeReveal() {
   blip('reveal');
   if ('vibrate' in navigator) navigator.vibrate(you.role === 'impostor' ? [120, 60, 120] : 60);
 }
-$('#reveal').addEventListener('click', () => { $('#reveal').hidden = true; });
+$('#reveal').addEventListener('click', () => {
+  $('#reveal').hidden = true;
+  // Re-render at once: the auto-open is gated on the card being gone, and
+  // waiting for the next snapshot left a dead pause with nothing happening.
+  if (S) render();
+});
 
 /* ----------------------------------------------------------------- render */
 function roomName(id) { const r = S && S.house.rooms.find((x) => x.id === id); return r ? r.name : id; }
@@ -283,7 +293,9 @@ function render() {
 
   maybeReveal();
   // Walking into a room with an unfinished task pops it up by itself.
-  if (S.state === 'playing' && you.alive && !me.director
+  // Not while the role card is up: the task used to open underneath it, so the
+  // player never saw their own role (and the impostor never learned they were it).
+  if (S.state === 'playing' && you.alive && !me.director && $('#reveal').hidden
       && !taskOpen && !autoTaskId && you.room && you.room !== lastAutoRoom) {
     lastAutoRoom = you.room;
     const t = (you.tasks || []).find((x) => !x.done && x.room === you.room);
@@ -1127,7 +1139,7 @@ async function restartLescan() {
 
 // Bumped whenever the client changes. It travels on every diag line, so a log
 // can never again be ambiguous about which version a phone is running.
-const BUILD = 'ui32';
+const BUILD = 'ui33';
 
 // Fire-and-forget note to the server so we can read what the phone did.
 function diag(o) {
