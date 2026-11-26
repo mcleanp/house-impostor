@@ -924,7 +924,9 @@ const MIME = {
 const server = http.createServer((req, res) => {
   const parsed = new URL(req.url, 'http://internal');
   const pathname = decodeURIComponent(parsed.pathname);
-  res.setHeader('cache-control', 'no-cache');
+  // no-cache alone still lets a phone keep the OLD copy and revalidate lazily;
+  // a deploy must reach handsets without anyone being told to reload.
+  res.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
 
   if (pathname === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
